@@ -25,6 +25,9 @@
 - `codex exec` for reviews: `--sandbox read-only -C <worktree> --output-last-message <file>`, prompt on stdin, plus `-m "$CODEX_MODEL"` only when non-empty.
 - Lessons cap: 40. Test log tail in prompt: 200 lines. Poll interval: 120 s. Defaults `REVIEW_TIMEOUT_SECS=1200`, `TEST_TIMEOUT_SECS=900`.
 - `state/`, `work/`, `config.sh` are gitignored.
+- Follow `AGENTS.md` and the `ub-mode` skill. Functions are declared `name() {` at column 0 and closed by `}` at column 0 (the quality tools rely on it).
+- Quality gate before every code commit (delegate to the `quality-gate` agent): `bash tests/run.sh` green, `tools/crapper` (every function CRAP < 10), `tools/dryer` (nothing ranked ≥ 0.8), `tools/mutator --since <task start ref>` (no survivors). Each task's commit step includes it.
+- Commits: Conventional Commits in English; body says why, what changed and how it was verified.
 
 ## Review Focus
 
@@ -61,23 +64,26 @@ pr-reviewer/
   prompts/memorize.md        # lesson-merge task
   rules.md                   # Jean's standing rules (seed)
   lessons.md                 # learned lessons (starts empty list)
-  tests/run.sh               # runner: sources tests/test_*.sh, runs every test_* fn
-  tests/helpers.sh           # assert_eq, assert_contains, assert_not_contains, mktmp
+  tests/run.sh               # (exists) runner: runs every test_* fn of tests/test_*.sh
+  tests/helpers.sh           # (exists) assert_eq, assert_contains, assert_not_contains, mktmp
+  tools/{crapper,dryer,mutator}, tools/lib/Quality.pm   # (exists) quality gate
   tests/fakes/{gh,codex}     # PATH stubs driven by env vars, log their argv
   tests/fixtures/*.json      # GraphQL responses
 ```
 
 ---
 
-### Task 1: Scaffold, test runner, common lib
+### Task 0: Dev tooling — DONE
+
+Already on `main`: `AGENTS.md`/`CLAUDE.md`, the `ub-mode` skill, the `quality-gate` and `reviewer` agents, `tests/run.sh` + `tests/helpers.sh` (with `tests/test_runner.sh`), and `tools/crapper`, `tools/dryer`, `tools/mutator` with their tests. Run any tool with `--help`.
+
+### Task 1: Scaffold and common lib
 
 **Files:**
-- Create: `.gitignore`, `config.example.sh`, `lib/common.sh`, `tests/run.sh`, `tests/helpers.sh`, `tests/test_common.sh`
+- Create: `.gitignore`, `config.example.sh`, `lib/common.sh`, `tests/test_common.sh`
 
 **Interfaces:**
 - Produces:
-  - `tests/run.sh [pattern]` — sources `tests/helpers.sh` and every `tests/test_*.sh`, runs each function named `test_*` (filtered by optional substring) in a subshell, prints `ok`/`FAIL <name>`, exits non-zero on any failure.
-  - helpers: `assert_eq expected actual [msg]`, `assert_contains haystack needle`, `assert_not_contains haystack needle`, `mktmp` (echoes a fresh temp dir).
   - `lib/common.sh` (sourced; honors `PR_REVIEWER_ROOT`, defaults to repo root): vars `ROOT STATE_DIR WORK_DIR`, loads `$ROOT/config.sh` (or `$PR_REVIEWER_CONFIG`) with defaults for every config var; `MARKER="<!-- ${CMD_PREFIX}-reviewer -->"`.
   - `log msg...` → appends `<ISO8601> msg` to `$STATE_DIR/poll.log`; rotates to `poll.log.1` above 1 MB.
   - `is_trusted login` → exit 0 if `login` is in `TRUSTED_USERS` (case-insensitive).
@@ -89,10 +95,10 @@ pr-reviewer/
   - `test_test_cmd_for`: `TEST_CMDS=("a/b|npm test" "c/d|make check")` → `test_cmd_for c/d` = `make check`; `test_cmd_for x/y` = ``.
   - `test_run_with_timeout`: `run_with_timeout 1 sleep 3` → 124; `run_with_timeout 5 true` → 0; `run_with_timeout 5 sh -c 'exit 7'` → 7.
   - `test_marker_from_prefix`: `CMD_PREFIX=foo` then source → `MARKER` = `<!-- foo-reviewer -->`.
-- [ ] **Step 2:** `git init`, then `bash tests/run.sh` → FAIL (lib missing).
+- [ ] **Step 2:** `bash tests/run.sh common` → FAIL (lib missing).
 - [ ] **Step 3:** Implement `lib/common.sh`, `config.example.sh` (the spec's config block verbatim), `.gitignore`.
 - [ ] **Step 4:** `bash tests/run.sh` → all `ok`.
-- [ ] **Step 5: Commit** (include the spec and this plan): `git add -A && git commit -m "chore: scaffold pr-reviewer with test runner and common lib"`
+- [ ] **Step 5: Quality gate, then commit** `chore: scaffold config and common lib`
 
 ### Task 2: Command parsing and trigger selection
 
@@ -117,7 +123,7 @@ pr-reviewer/
 - [ ] **Step 2:** `bash tests/run.sh select` → FAIL.
 - [ ] **Step 3:** Implement `lib/select.jq` and `lib/command.sh`.
 - [ ] **Step 4:** `bash tests/run.sh select` → all `ok`.
-- [ ] **Step 5: Commit** `feat: parse trigger commands and select trusted triggers`
+- [ ] **Step 5: Quality gate, then commit** `feat: parse trigger commands and select trusted triggers`
 
 ### Task 3: State store and pure decisions
 
@@ -143,7 +149,7 @@ pr-reviewer/
 - [ ] **Step 2:** `bash tests/run.sh` → new tests FAIL.
 - [ ] **Step 3:** Implement the three libs.
 - [ ] **Step 4:** `bash tests/run.sh` → all `ok`.
-- [ ] **Step 5: Commit** `feat: add state store, mode/test decisions and output validators`
+- [ ] **Step 5: Quality gate, then commit** `feat: add state store, mode/test decisions and output validators`
 
 ### Task 4: GitHub layer and poller
 
@@ -171,7 +177,7 @@ pr-reviewer/
 - [ ] **Step 2:** `bash tests/run.sh poll` → FAIL.
 - [ ] **Step 3:** Implement `lib/github.sh`, `poll.sh` (honor `REVIEW_SH`/`MEMORIZE_SH`, defaulting to `$ROOT/review.sh`/`$ROOT/memorize.sh`).
 - [ ] **Step 4:** `bash tests/run.sh` → all `ok`.
-- [ ] **Step 5: Commit** `feat: add github helpers and the poll loop`
+- [ ] **Step 5: Quality gate, then commit** `feat: add github helpers and the poll loop`
 
 ### Task 5: Workspace, prompts and prompt assembly
 
@@ -201,7 +207,7 @@ pr-reviewer/
 - [ ] **Step 2:** `bash tests/run.sh` → FAIL.
 - [ ] **Step 3:** Implement libs and write the prompt files.
 - [ ] **Step 4:** `bash tests/run.sh` → all `ok`.
-- [ ] **Step 5: Commit** `feat: add workspace handling, prompts and prompt assembly`
+- [ ] **Step 5: Quality gate, then commit** `feat: add workspace handling, prompts and prompt assembly`
 
 ### Task 6: review.sh
 
@@ -232,7 +238,7 @@ pr-reviewer/
 - [ ] **Step 2:** `bash tests/run.sh review` → FAIL.
 - [ ] **Step 3:** Implement `review.sh`.
 - [ ] **Step 4:** `bash tests/run.sh` → all `ok`.
-- [ ] **Step 5: Commit** `feat: add review command with full and update modes`
+- [ ] **Step 5: Quality gate, then commit** `feat: add review command with full and update modes`
 
 ### Task 7: memorize.sh
 
@@ -249,7 +255,7 @@ pr-reviewer/
 - [ ] **Step 2:** `bash tests/run.sh memorize` → FAIL.
 - [ ] **Step 3:** Implement `memorize.sh`.
 - [ ] **Step 4:** `bash tests/run.sh` → all `ok`.
-- [ ] **Step 5: Commit** `feat: add memorize command`
+- [ ] **Step 5: Quality gate, then commit** `feat: add memorize command`
 
 ### Task 8: install, uninstall, README, live smoke
 
@@ -264,4 +270,4 @@ pr-reviewer/
 - [ ] **Step 1:** Implement the three files. Run `bash -n` on every `.sh` → no output.
 - [ ] **Step 2:** `bash tests/run.sh` → all `ok`.
 - [ ] **Step 3: Live smoke (with Jean):** set `REPOS` to a scratch repo of Jean's, run `./install.sh`, open a small PR, comment `/jeanjacintho-review`; within ~2 min expect 👀, then one English review ending in `VERDICT:`; push a commit and comment `/jeanjacintho-update-review` → "Since last review" line; comment `/jeanjacintho-memorize <lesson>` → `Learned:` reply and new line in `lessons.md`. Check `state/poll.log`.
-- [ ] **Step 4: Commit** `feat: add launchd install and README`
+- [ ] **Step 4: Quality gate, then commit** `feat: add launchd install and README`
