@@ -1,0 +1,144 @@
+#!/usr/bin/perl
+# dryer: ranks near-duplicate regions in the project's Bash and jq code.
+# Lines are normalized (strings -> S, variables -> V, numbers -> N), cut
+# into windows of consecutive lines, and every pair of windows is ranked by
+# the Dice similarity of their token counts. Matching windows on the same
+# diagonal merge into one reported region.
+use strict;
+use warnings;
+use FindBin;
+use lib "$FindBin::Bin/lib";
+use Quality;
+use Cwd qw(realpath);
+use Getopt::Long;
+use List::Util qw(min sum0);
+
+my $USAGE = <<'TXT';
+usage: tools/dryer [--threshold R] [--window N] [--min-tokens N] [--root DIR] [FILE...]
+  Lists duplicated regions ranked R or above (default 0.8), highest first,
+  and exits 1 when there is any.
+  --window      consecutive normalized lines compared at once (default 6)
+  --min-tokens  ignore windows with fewer tokens (default 20)
+  FILE...       files relative to the root (default: all project Bash and jq files)
+TXT
+
+my ($threshold, $window, $min_tokens, $root, $help) = (0.8, 6, 20, '.', 0);
+GetOptions('threshold=f' => \$threshold, 'window=i' => \$window,
+           'min-tokens=i' => \$min_tokens, 'root=s' => \$root, 'help' => \$help) or die $USAGE;
+if ($help) { print $USAGE; exit 0; }
+$root = realpath($root);
+
+my @files = @ARGV ? @ARGV : Quality::source_files($root, 1);
+my @windows = map { windows_of($_) } @files;
+my @regions = distinct(sort { $b->{rank} <=> $a->{rank} || $a->{label} cmp $b->{label} }
+                       merge(matches(@windows)));
+
+for my $r (@regions) {
+    printf "%.2f  %s\n", $r->{rank}, $r->{label};
+}
+if (@regions) {
+    printf "%d duplicated regions at or above %s\n", scalar @regions, $threshold;
+    exit 1;
+}
+print "no duplication at or above $threshold\n";
+exit 0;
+
+sub normalize {
+    my ($line) = @_;
+    my $t = Quality::masked($line);
+    $t =~ s/"[^"]*"|'[^']*'/ S /g;
+    $t =~ s/\$\{[^}]*\}|\$\w+|\$[@*#?!]/ V /g;
+    $t =~ s/\b\d+\b/ N /g;
+    $t =~ s/^\s+|\s+$//g;
+    return '' if $t =~ /^(?:then|else|fi|do|done|esac|;;|\{|\}|\))?$/;
+    return $t;
+}
+
+sub windows_of {
+    my ($file) = @_;
+    my @lines = Quality::read_lines("$root/$file");
+    my @code = Quality::code_flags(@lines);
+    my @kept;
+    for my $i (0 .. $#lines) {
+        next unless $code[$i];
+        my $t = normalize($lines[$i]);
+        push @kept, [$i + 1, [$t =~ /\w+|[^\w\s]+/g]] if $t ne '';
+    }
+    my @out;
+    for my $k (0 .. @kept - $window) {
+        my %count;
+        $count{$_}++ for map { @{ $kept[$_][1] } } $k .. $k + $window - 1;
+        my $size = sum0 values %count;
+        next if $size < $min_tokens;
+        push @out, { file => $file, k => $k, first => $kept[$k][0],
+                     last => $kept[$k + $window - 1][0], count => \%count, size => $size };
+    }
+    return @out;
+}
+
+sub dice {
+    my ($a, $b) = @_;
+    my $shared = sum0 map { min($a->{count}{$_}, $b->{count}{$_} // 0) } keys %{ $a->{count} };
+    return 2 * $shared / ($a->{size} + $b->{size});
+}
+
+sub matches {
+    my (@w) = @_;
+    my @found;
+    for my $i (0 .. $#w) {
+        for my $j ($i + 1 .. $#w) {
+            my ($a, $b) = ($w[$i], $w[$j]);
+            next if $a->{file} eq $b->{file} && $b->{k} - $a->{k} < $window;
+            next if 2 * min($a->{size}, $b->{size}) / ($a->{size} + $b->{size}) < $threshold;
+            my $rank = dice($a, $b);
+            push @found, [$a, $b, $rank] if $rank >= $threshold;
+        }
+    }
+    return @found;
+}
+
+# Joins matches that continue each other (both windows advance by one).
+sub merge {
+    my (@found) = @_;
+    my (%open, @regions);
+    for my $m (sort { $a->[0]{file} cmp $b->[0]{file} || $a->[0]{k} <=> $b->[0]{k} } @found) {
+        my ($a, $b, $rank) = @$m;
+        my $diag = join '|', $a->{file}, $b->{file}, $a->{k} - $b->{k};
+        my $r = $open{$diag};
+        if ($r && $r->{next} == $a->{k}) {
+            push @{ $r->{ranks} }, $rank;
+            @$r{qw(a_last b_last next)} = ($a->{last}, $b->{last}, $a->{k} + 1);
+            next;
+        }
+        $r = { a => $a, b => $b, a_last => $a->{last}, b_last => $b->{last},
+               ranks => [$rank], next => $a->{k} + 1 };
+        $open{$diag} = $r;
+        push @regions, $r;
+    }
+    return map {
+        {
+            span  => [$_->{a}{file}, $_->{a}{first}, $_->{a_last}, $_->{b}{file}, $_->{b}{first}, $_->{b_last}],
+            rank  => sum0(@{ $_->{ranks} }) / @{ $_->{ranks} },
+            label => sprintf('%s:%d-%d  ~  %s:%d-%d', $_->{a}{file}, $_->{a}{first}, $_->{a_last},
+                             $_->{b}{file}, $_->{b}{first}, $_->{b_last}),
+        }
+    } @regions;
+}
+
+# Keeps the best-ranked region of each overlapping group: a shifted copy of
+# the same match (both sides overlapping a kept region) is dropped.
+sub distinct {
+    my (@ranked) = @_;
+    my @kept;
+    for my $r (@ranked) {
+        push @kept, $r unless grep { overlaps($_->{span}, $r->{span}) } @kept;
+    }
+    return @kept;
+}
+
+sub overlaps {
+    my ($x, $y) = @_;
+    return $x->[0] eq $y->[0] && $x->[3] eq $y->[3]
+        && $x->[1] <= $y->[2] && $y->[1] <= $x->[2]
+        && $x->[4] <= $y->[5] && $y->[4] <= $x->[5];
+}
