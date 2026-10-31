@@ -3,6 +3,7 @@ set -euo pipefail
 printf 'gh %s\n' "$*" >> "$FAKE_LOG"
 case "$*" in
     *'repository('*|*'repository(owner:'*) cat "$FAKE_GH_PRS" ;;
+    'repo clone '*) git clone --no-checkout "$FAKE_GH_ORIGIN" "$4" ;;
     'pr view '*) cat "$FAKE_GH_META" ;;
     'pr comment '*)
         while [ "$1" != --body-file ]; do shift; done
