@@ -53,3 +53,11 @@ The plan's live smoke test explicitly requires Jean: choose a scratch repository
 - Code commits, in order: `391201c`, `4f2ed5b`, `fb3746c`, `f14ac46`, `b8de821`, `738fe35`, `8a71eca`, `9a69753` (the final operations commit can also be identified by `feat(launchd): install and operate the personal reviewer`).
 - Temporary Git stashes were removed and only the original `main` worktree remains. The configured publication target is `origin/main` at `https://github.com/jeanjacintho/pr-reviewer.git`.
 - Live launchd/GitHub validation remains pending as described above; installation files and test PR comments were not published or activated during local validation.
+
+## Authorized live smoke — in progress
+
+- Jean authorized creating the disposable PR and leaving the Mac service active.
+- Created PR [#1](https://github.com/jeanjacintho/pr-reviewer/pull/1) with a documentation-only fixture. The initial launchd job could not read scripts from the Documents checkout (`Operation not permitted`). Unloaded that job and installed a separate checkout at `~/Library/Application Support/pr-reviewer`, preserving configuration and the original installation watermark.
+- The relocated job received the review command, prepared separate review/test worktrees, and posted exactly one failure reply. Later polling cycles did not retry the seen command.
+- Diagnosed actual CLI configuration loading outside the bot's publication path. Quoted names in dotted override paths created a new MCP entry without transport configuration. Root TOML table values preserve server names and project paths correctly; a real configuration listing and a real read-only Codex diagnostic succeeded with the correction.
+- Extended the fake CLI to reject that malformed override and pinned a combined table for two MCP servers, including a name containing a dot. The regression failed before the code fix and passed after it.

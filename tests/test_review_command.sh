@@ -80,7 +80,7 @@ test_review_test_author_gate() {
 test_review_codex_isolation_and_model_override() {
     review_setup
     printf '\nCODEX_MODEL=fake-model\n' >> "$PR_REVIEWER_CONFIG"
-    export FAKE_CODEX_MCP_LIST='[{"name":"dangerous.server","enabled":true}]'
+    export FAKE_CODEX_MCP_LIST='[{"name":"dangerous.server","enabled":true},{"name":"other","enabled":true}]'
     bash "$REVIEW_SCRIPT" full o/r 7 command || fail isolated_review
     local calls="$(cat "$FAKE_LOG")"
     assert_contains "$calls" '--sandbox read-only'
@@ -92,7 +92,9 @@ test_review_codex_isolation_and_model_override() {
     assert_contains "$calls" '--disable multi_agent'
     assert_contains "$calls" 'web_search="disabled"'
     assert_contains "$calls" 'trust_level="untrusted"'
-    assert_contains "$calls" 'mcp_servers."dangerous.server".enabled=false'
+    assert_contains "$calls" 'mcp_servers={"dangerous.server"={enabled=false},"other"={enabled=false}}'
+    assert_contains "$calls" "projects={\"$WORK_DIR/wt/o+r-7-review\"={trust_level=\"untrusted\"}}"
+    assert_not_contains "$calls" 'projects."'
     assert_contains "$calls" '-m fake-model'
     assert_not_contains "$calls" '--skip-git-repo-check'
 }

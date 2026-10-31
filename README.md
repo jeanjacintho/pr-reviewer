@@ -10,9 +10,15 @@ support `codex exec --sandbox read-only --output-last-message` and the
 `project_doc_max_bytes` setting, feature toggles and `codex mcp list --json`. No Node, Python, Docker or public server
 is needed to run the bot.
 
+Use an installed checkout outside macOS-protected Documents/Desktop folders.
+The live smoke test found that launchd could not read this project from Documents.
+Keep the development checkout separate from the active installation.
+
 To configure and start:
 
 ```bash
+git clone https://github.com/jeanjacintho/pr-reviewer.git "$HOME/Library/Application Support/pr-reviewer"
+cd "$HOME/Library/Application Support/pr-reviewer"
 cp config.example.sh config.sh
 # Edit config.sh: choose repositories, trusted people and optional test commands.
 ./install.sh
