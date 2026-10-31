@@ -1,0 +1,7 @@
+#!/bin/bash
+set -euo pipefail
+printf 'launchctl %s\n' "$*" >> "$FAKE_LOG"
+case "$1" in
+    bootout) exit "${FAKE_BOOTOUT_EXIT:-0}" ;;
+    print) exit "${FAKE_PRINT_EXIT:-1}" ;;
+esac
