@@ -191,9 +191,33 @@ As lições são **globais** (valem para todos os repos). Regras específicas de
 - Log em `state/poll.log` (uma linha por evento, com rotação simples por tamanho).
 - `state/` e `work/` gitignored.
 
+## Dashboard local (adendo de 2026-10-31)
+
+Uma página web **só no Mac do Jean** para configurar o bot sem editar arquivos à mão.
+
+### Configuração por repositório — `repos.json` (gitignored; `repos.example.json` versionado)
+
+```json
+{"repos":[{"repo":"jeanjacintho/motes","enabled":true,"trusted_users":["jeanjacintho","alice"],"model":"","test_cmd":"npm ci && npm test"}]}
+```
+
+- Substitui `REPOS`, `TRUSTED_USERS`, `TEST_CMDS` e `CODEX_MODEL` do `config.sh`; este fica só com `CMD_PREFIX` e os timeouts. `CODEX_MODEL` global continua como padrão quando `model` do repo está vazio.
+- **Confiança é por repositório.** `trusted_users` de um repo decide (a) quem pode disparar comandos nele e (b) se o código do PR roda `test_cmd`: só quando o **autor do PR** está na mesma lista. Confiar em alguém é, portanto, aceitar que o código dessa pessoa rode `test_cmd` na máquina.
+- `enabled: false` mantém o repo na lista sem consultá-lo.
+- O `poll.sh` relê o arquivo a cada ciclo; mudanças valem no ciclo seguinte, sem reiniciar. `repos.json` é lido com `jq`; o dashboard nunca gera código shell.
+- Escrita atômica (arquivo temporário + `mv`), e entradas validadas na borda: `repo` casa `owner/name`, login casa um login do GitHub, `model` casa `[A-Za-z0-9._:-]{0,64}`. `test_cmd` é texto livre e é executado como hoje no `config.sh` (decisão de quem configura).
+
+### Servidor
+
+- Node, **sem dependências** (`http` embutido, front em HTML/JS puro), em `dashboard/`. Escuta só em `127.0.0.1` (porta `DASHBOARD_PORT`, padrão 4777).
+- Sem login. Como defesa contra páginas abertas no navegador, rejeita requisições cujo `Host` ou `Origin` não sejam o do próprio dashboard.
+- Mostra e edita `repos.json`; mostra leitura de `reviewed.json`, cauda de `poll.log` e o estado do launchd. Não dispara revisões nem altera `seen.json`.
+- Roda como segundo serviço launchd (`com.jeanjacintho.pr-reviewer-dashboard`), a partir da instalação fora de Documents.
+- Se o dashboard cair, o bot continua: o Bash só lê `repos.json`.
+
 ## Decisões minhas (o Jean pode mudar)
 
-- **Bash + `gh` + `jq` + `codex exec`**. Sem Node/Python.
+- **Bash + `gh` + `jq` + `codex exec`**. Sem Node/Python no bot. Exceção única: o dashboard local usa Node sem dependências.
 - Configuração num `config.sh` sourceado, no próprio repo.
 - Lições globais, não por repo; teto de 40.
 - Reações (👀/✅/😕) como sinal de status.

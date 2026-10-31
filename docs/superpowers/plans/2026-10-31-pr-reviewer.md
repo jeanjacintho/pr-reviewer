@@ -15,7 +15,7 @@
 ## Global Constraints
 
 - Bash 3.2 compatible: no associative arrays, no `mapfile`, no `${var,,}`. Shebang `#!/bin/bash`, `set -euo pipefail` in entrypoints.
-- No dependencies beyond `gh`, `jq`, `git`, `codex`, `perl`. No Node/Python.
+- No dependencies beyond `gh`, `jq`, `git`, `codex`, `perl`. No Node/Python in the bot. (The local dashboard is the one Node exception; see `2026-10-31-dashboard.md`.)
 - Everything the bot posts on GitHub is English. Code comments and commit messages English.
 - Prompts and scripts are written from scratch. Do not copy text or code from any other reviewer project, and do not name one in files or commits.
 - Command prefix comes from `CMD_PREFIX` (default `jeanjacintho`). Commands: `review`, `update-review`, `memorize`. Regex on the first non-blank line: `^\s*/<prefix>-(review|update-review|memorize)(\s|$)`, case-insensitive.

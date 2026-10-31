@@ -4,6 +4,7 @@
 
 Read the [design spec](docs/superpowers/specs/2026-10-31-pr-reviewer-design.md),
 then the [implementation plan](docs/superpowers/plans/2026-10-31-pr-reviewer.md)
+(for dashboard work, [the dashboard plan](docs/superpowers/plans/2026-10-31-dashboard.md))
 and the task you are working on. The spec is the source of truth; if the plan
 or a task conflicts with it, stop and ask.
 
@@ -17,8 +18,9 @@ touch code.
 
 - Bash 3.2 (the macOS `/bin/bash`): no associative arrays, no `mapfile`, no
   `${var,,}`. Entrypoints start with `#!/bin/bash` and `set -euo pipefail`.
-- Runtime dependencies are `gh`, `jq`, `git`, `codex` and `perl` only. No
-  Node or Python.
+- Runtime dependencies of the bot are `gh`, `jq`, `git`, `codex` and `perl`
+  only. No Node or Python there. The one exception is the local dashboard in
+  `dashboard/`: Node with no npm dependencies, tested with `node --test`.
 - Declare functions as `name() {` at column 0 and close them with `}` at
   column 0. The quality tools find functions by that shape.
 - Code comments, commit messages and everything the bot posts on GitHub are
