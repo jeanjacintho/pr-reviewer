@@ -25,9 +25,7 @@ repo_is_trusted() {
 }
 
 repo_model() {
-    local model
-    model="$(repos_query 'model_of($r)' --arg r "$1")"
-    printf '%s\n' "${model:-$CODEX_MODEL}"
+    repos_query 'model_of($r)' --arg r "$1"
 }
 
 repo_engine() {

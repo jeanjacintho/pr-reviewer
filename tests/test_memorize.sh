@@ -27,6 +27,15 @@ test_memorize_uses_repo_model() {
     assert_contains "$(cat "$FAKE_LOG")" '-m memo-model'
 }
 
+test_memorize_with_claude_has_no_tools() {
+    memorize_setup
+    repos_set engine claude
+    printf -- '- Existing rule (from o/r#1)\n- Do not flag X (from o/r#7)\n' > "$FAKE_CODEX_OUT"
+    bash "$MEMORIZE_SCRIPT" o/r 7 command || fail memorize
+    assert_contains "$(cat "$FAKE_LOG")" 'claude -p --restricted --tools  --permission-mode dontAsk'
+    assert_eq "$(cat "$FAKE_CODEX_OUT")" "$(cat "$ROOT/lessons.md")"
+}
+
 test_memorize_empty_lesson() {
     memorize_setup
     FAKE_GH_BODY=/jeanjacintho-memorize

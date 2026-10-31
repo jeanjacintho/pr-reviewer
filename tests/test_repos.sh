@@ -39,12 +39,12 @@ test_repos_ignores_malformed_logins() {
     assert_eq 'dave' "$(repo_trusted_users o/bad)"
 }
 
-test_repos_model_falls_back_to_global() {
+test_repos_model_is_the_repository_own() {
     repos_setup "$REPOS_FIXTURE"
     CODEX_MODEL=global-model
     assert_eq gpt-x "$(repo_model o/a)"
-    assert_eq global-model "$(repo_model o/b)"
-    assert_eq global-model "$(repo_model o/bad)"
+    assert_eq '' "$(repo_model o/b)"
+    assert_eq '' "$(repo_model o/bad)"
 }
 
 test_repos_test_cmd() {
@@ -81,8 +81,7 @@ test_repos_rejects_values_with_a_trailing_newline() {
     repos_setup '{"repos":[{"repo":"o/a\n","trusted_users":["alice"]},{"repo":"o/b","trusted_users":["bob\n","carol"],"model":"m\n"}]}'
     assert_eq 'o/b' "$(repos_enabled)"
     assert_eq 'carol' "$(repo_trusted_users o/b)"
-    CODEX_MODEL=global
-    assert_eq global "$(repo_model o/b)"
+    assert_eq '' "$(repo_model o/b)"
 }
 
 test_repos_trailing_garbage_discards_everything() {

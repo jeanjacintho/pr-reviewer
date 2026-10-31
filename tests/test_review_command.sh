@@ -115,6 +115,55 @@ test_review_global_model_is_the_default() {
     assert_contains "$(cat "$FAKE_LOG")" '-m global-model'
 }
 
+CLAUDE_FLAGS='-p --restricted --tools Read,Grep,Glob --permission-mode dontAsk --strict-mcp-config --disable-slash-commands --no-session-persistence --output-format text'
+
+test_review_claude_engine_runs_read_only_in_the_worktree() {
+    review_setup
+    printf '\nCODEX_MODEL=global-model\n' >> "$PR_REVIEWER_CONFIG"
+    repos_set engine claude
+    repos_set model opus
+    repos_set effort high
+    bash "$REVIEW_SCRIPT" full o/r 7 command || fail review
+    local calls="$(cat "$FAKE_LOG")"
+    assert_contains "$calls" "claude $CLAUDE_FLAGS --model opus --effort high"
+    assert_not_contains "$calls" 'codex '
+    assert_not_contains "$calls" 'global-model'
+    assert_eq "$WORK_DIR/wt/o+r-7-review" "$(cat "$FAKE_LOG.claude-pwd")"
+    assert_contains "$(cat "$FAKE_LOG.stdin")" 'VERDICT'
+    assert_one_review_comment
+    assert_contains "$(cat "$FAKE_POSTS")" 'A valid review'
+}
+
+test_review_claude_engine_uses_cli_defaults_when_empty() {
+    review_setup
+    repos_set engine claude
+    bash "$REVIEW_SCRIPT" full o/r 7 command || fail review
+    assert_contains "$(cat "$FAKE_LOG")" "claude $CLAUDE_FLAGS"
+    assert_not_contains "$(cat "$FAKE_LOG")" '--model'
+    assert_not_contains "$(cat "$FAKE_LOG")" '--effort'
+}
+
+test_review_codex_effort_is_passed_only_when_set() {
+    review_setup
+    bash "$REVIEW_SCRIPT" full o/r 7 command || fail default_effort
+    assert_not_contains "$(cat "$FAKE_LOG")" 'model_reasoning_effort'
+    : > "$FAKE_LOG"
+    repos_set effort xhigh
+    bash "$REVIEW_SCRIPT" full o/r 7 command || fail set_effort
+    assert_contains "$(cat "$FAKE_LOG")" 'model_reasoning_effort="xhigh"'
+}
+
+test_review_unknown_engine_fails_once_without_running_anything() {
+    review_setup
+    repos_set engine other-cli
+    bash "$REVIEW_SCRIPT" full o/r 7 command && fail unknown_engine
+    assert_one_review_comment
+    assert_contains "$(cat "$FAKE_POSTS")" 'Review failed:'
+    assert_not_contains "$(cat "$FAKE_LOG")" 'codex '
+    assert_not_contains "$(cat "$FAKE_LOG")" 'claude '
+    assert_contains "$(cat "$STATE_DIR/poll.log")" 'Unknown review engine for o/r'
+}
+
 test_review_github_failure_does_not_publish_twice() {
     review_setup
     FAKE_GH_FAIL_MATCH='pr view' bash "$REVIEW_SCRIPT" full o/r 7 command && fail metadata_failure

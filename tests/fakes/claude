@@ -1,0 +1,7 @@
+#!/bin/bash
+set -euo pipefail
+printf 'claude %s\n' "$*" >> "$FAKE_LOG"
+printf '%s\n' "$PWD" > "$FAKE_LOG.claude-pwd"
+cat > "$FAKE_LOG.stdin"
+cat "${FAKE_CLAUDE_OUT:-$FAKE_CODEX_OUT}"
+exit "${FAKE_CLAUDE_EXIT:-0}"

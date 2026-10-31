@@ -3,9 +3,9 @@ memorize_generate() {
     prev_review "$REPO" "$PR" > "$MEMORY_TMP/previous"
     build_memorize_prompt "$MEMORY_TMP/prompt" "$MEMORY_TMP/lesson" "$MEMORY_TMP/previous"
     mkdir "$MEMORY_TMP/empty"
-    MEMORY_FAILURE="Couldn't save that lesson: Codex failed or timed out."
-    codex_text "$REPO" 300 "$MEMORY_TMP/empty" "$MEMORY_TMP/output" "$MEMORY_TMP/prompt" text
-    MEMORY_FAILURE="Couldn't save that lesson: Codex returned an invalid lessons list."
+    MEMORY_FAILURE="Couldn't save that lesson: the review engine failed or timed out."
+    engine_text "$REPO" 300 "$MEMORY_TMP/empty" "$MEMORY_TMP/output" "$MEMORY_TMP/prompt" text
+    MEMORY_FAILURE="Couldn't save that lesson: the review engine returned an invalid lessons list."
     validate_lessons "$MEMORY_TMP/output"
 }
 

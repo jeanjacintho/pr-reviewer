@@ -11,12 +11,15 @@ codex_safety() {
 }
 
 codex_text() {
-    local repo="$1" seconds="$2" directory="$3" output="$4" prompt="$5" model
+    local repo="$1" seconds="$2" directory="$3" output="$4" prompt="$5" model effort
     model="$(repo_model "$repo")"
+    model="${model:-$CODEX_MODEL}"
+    effort="$(repo_effort "$repo")"
     codex_safety "$directory"
     local args=(exec --sandbox read-only -C "$directory" --output-last-message "$output")
     args+=( "${CODEX_SAFETY_ARGS[@]}" )
     if [ "${6:-}" = text ]; then args+=( --skip-git-repo-check --disable shell_tool --disable view_image ); fi
     if [ -n "$model" ]; then args+=( -m "$model" ); fi
+    if [ -n "$effort" ]; then args+=( -c "model_reasoning_effort=\"$effort\"" ); fi
     run_with_timeout "$seconds" codex "${args[@]}" - < "$prompt" > "$output.log" 2>&1
 }

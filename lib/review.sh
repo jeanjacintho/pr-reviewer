@@ -69,8 +69,8 @@ review_data() {
     build_review_prompt "$REVIEW_TMP/prompt" "$MODE"
 }
 
-review_codex() {
-    codex_text "$REPO" "$REVIEW_TIMEOUT_SECS" "$REVIEW_WT" "$REVIEW_TMP/output" "$REVIEW_TMP/prompt"
+review_run() {
+    engine_text "$REPO" "$REVIEW_TIMEOUT_SECS" "$REVIEW_WT" "$REVIEW_TMP/output" "$REVIEW_TMP/prompt"
     validate_review "$REVIEW_TMP/output"
 }
 
@@ -109,8 +109,8 @@ review_main() {
     PHASE='could not prepare review context'
     review_tests_start
     review_data
-    PHASE='Codex failed, timed out, or returned an invalid review'
-    review_codex
+    PHASE='The review engine failed, timed out, or returned an invalid review'
+    review_run
     PHASE='could not publish review'
     review_publish
 }
