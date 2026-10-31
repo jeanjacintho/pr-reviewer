@@ -36,7 +36,28 @@ contain spaces. Launchd's PATH includes Homebrew and `~/.local/bin`; put CLI
 binaries there, or set `PR_REVIEWER_PATH` when installing to use a custom PATH.
 The installer checks dependencies using the same PATH that launchd will use.
 
-`./uninstall.sh` unloads the service and removes its plist, preserving local data.
+## Dashboard
+
+`./install.sh` also registers a second launchd job,
+`com.jeanjacintho.pr-reviewer-dashboard`, that keeps a local web page running at
+`http://127.0.0.1:4777` (set `DASHBOARD_PORT` when installing to use another
+port). It edits `repos.json` for you: repositories, trusted people, the review
+model and the test command per repository, and it shows recent reviews and the
+poll log. It needs Node, which is used only for this page: no packages are
+installed, and the bot itself never depends on it. Without Node the installer
+says so and installs the bot alone.
+
+The server listens only on `127.0.0.1` and has no login. It refuses requests
+whose `Host` or `Origin` is not its own, so a web page open in your browser
+cannot change your settings. Changes apply from the bot's next poll cycle.
+Its log is `state/dashboard.log`. To run it by hand:
+`PR_REVIEWER_ROOT="$PWD" node dashboard/server.js`.
+
+Trusting someone in the dashboard has two effects: their commands start reviews
+in that repository, and their own pull requests get its test command run on this
+Mac.
+
+`./uninstall.sh` unloads both services and removes their plists, preserving local data.
 Uninstall checks the final launchd state. An already-absent service succeeds;
 a still-loaded service produces a nonzero exit and a retry command after the
 saved plist is removed.

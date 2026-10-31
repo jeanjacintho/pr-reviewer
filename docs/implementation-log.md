@@ -80,3 +80,13 @@ The installed lesson is:
 > Report correctness bugs only when you can identify a concrete failing path and cite current file:line references; exclude style-only changes. (from jeanjacintho/pr-reviewer#1)
 
 The installed checkout intentionally retains the learned `lessons.md` as local operational data. Its ignored `config.sh`, state, logs and repository cache were preserved. The development checkout remains separate and clean after committing this record.
+
+## Local dashboard and per-repository settings
+
+Planned in `docs/superpowers/plans/2026-10-31-dashboard.md`; implemented in seven small commits on `main`, each passing `tools/gate` and an independent Codex review.
+
+- Settings moved from global arrays in `config.sh` to `repos.json`: per repository `enabled`, `trusted_users`, `model`, `test_cmd`. Trust is per repository; the global `CODEX_MODEL` stays the default. `install.sh` converts an old configuration once and never overwrites an existing `repos.json`.
+- Review findings that changed the code: a trusted list of the wrong type must trust nobody; repository names such as `../r` are rejected; a damaged file yields no partial result; a trailing newline in a repo, login or model is rejected (jq's `$` matches before it, so the patterns end with `\z`); migration is written through a temporary file; the page edits nothing until the settings loaded and while saving.
+- The dashboard is Node with no packages, bound to `127.0.0.1`, refusing foreign `Host`/`Origin`, with a strict content security policy. It runs as a second launchd job; the installer skips it, and says so, when Node is missing.
+- Not verified here: the active installation in `~/Library/Application Support/pr-reviewer` has not been updated to this version, so no live review has run with `repos.json` yet.
+

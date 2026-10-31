@@ -90,3 +90,66 @@ test_install_failed_migration_leaves_no_repos_file() {
     [ ! -e "$PR_REVIEWER_ROOT/repos.json" ] || fail partial_repos_json
     assert_eq '' "$(ls -A "$PR_REVIEWER_ROOT" | grep 'repos' || true)"
 }
+
+test_install_registers_the_dashboard_service() {
+    install_setup
+    export DASHBOARD_PORT=4888
+    bash "$INSTALL_SOURCE/install.sh" > "$PR_REVIEWER_ROOT/install.stdout" || fail install
+    local plist="$LAUNCH_AGENTS_DIR/com.jeanjacintho.pr-reviewer-dashboard.plist"
+    [ -s "$plist" ] || fail dashboard_plist
+    assert_contains "$(cat "$plist")" '<key>Label</key><string>com.jeanjacintho.pr-reviewer-dashboard</string>'
+    assert_contains "$(cat "$plist")" "<string>$(command -v node)</string>"
+    assert_contains "$(cat "$plist")" "$INSTALL_SOURCE/dashboard/server.js"
+    assert_contains "$(cat "$plist")" '<key>KeepAlive</key><true/>'
+    assert_not_contains "$(cat "$plist")" 'StartInterval'
+    assert_contains "$(cat "$plist")" '<key>PR_REVIEWER_ROOT</key>'
+    assert_contains "$(cat "$plist")" '<key>DASHBOARD_PORT</key><string>4888</string>'
+    assert_contains "$(cat "$plist")" 'with spaces &amp; chars/state/dashboard.log'
+    assert_contains "$(cat "$FAKE_LOG")" 'launchctl bootstrap gui/'"$UID"' '"$plist"
+    assert_contains "$(cat "$PR_REVIEWER_ROOT/install.stdout")" 'http://127.0.0.1:4888'
+    assert_not_contains "$(cat "$LAUNCH_AGENTS_DIR/com.jeanjacintho.pr-reviewer.plist")" 'DASHBOARD_PORT'
+}
+
+test_install_without_node_still_installs_the_bot() {
+    install_setup
+    unset DASHBOARD_PORT
+    PR_REVIEWER_PATH="$INSTALL_SOURCE/tests/fakes:/usr/bin:/bin" bash "$INSTALL_SOURCE/install.sh" > "$PR_REVIEWER_ROOT/install.stdout" || fail install
+    [ -s "$LAUNCH_AGENTS_DIR/com.jeanjacintho.pr-reviewer.plist" ] || fail bot_plist
+    [ ! -e "$LAUNCH_AGENTS_DIR/com.jeanjacintho.pr-reviewer-dashboard.plist" ] || fail dashboard_plist
+    assert_contains "$(cat "$PR_REVIEWER_ROOT/install.stdout")" 'Node not found; the dashboard was not installed.'
+}
+
+test_uninstall_removes_both_services() {
+    install_setup
+    bash "$INSTALL_SOURCE/install.sh" > /dev/null || fail install
+    : > "$FAKE_LOG"
+    bash "$INSTALL_SOURCE/uninstall.sh" > "$PR_REVIEWER_ROOT/uninstall.stdout" 2>&1 || fail uninstall
+    assert_contains "$(cat "$FAKE_LOG")" 'launchctl bootout gui/'"$UID"'/com.jeanjacintho.pr-reviewer-dashboard'
+    assert_contains "$(cat "$FAKE_LOG")" 'launchctl bootout gui/'"$UID"'/com.jeanjacintho.pr-reviewer'
+    [ ! -e "$LAUNCH_AGENTS_DIR/com.jeanjacintho.pr-reviewer-dashboard.plist" ] || fail dashboard_plist
+    [ ! -e "$LAUNCH_AGENTS_DIR/com.jeanjacintho.pr-reviewer.plist" ] || fail bot_plist
+}
+
+test_uninstall_reports_a_dashboard_that_keeps_running() {
+    install_setup
+    bash "$INSTALL_SOURCE/install.sh" > /dev/null || fail install
+    # Only the dashboard stays loaded.
+    printf '#!/bin/bash\nprintf "launchctl %%s\\n" "$*" >> "$FAKE_LOG"\ncase "$*" in "print "*dashboard) exit 0 ;; "print "*) exit 1 ;; esac\n' > "$PR_REVIEWER_ROOT/launchctl"
+    chmod +x "$PR_REVIEWER_ROOT/launchctl"
+    if PATH="$PR_REVIEWER_ROOT:$PATH" bash "$INSTALL_SOURCE/uninstall.sh" > "$PR_REVIEWER_ROOT/uninstall.stdout" 2>&1; then fail should_fail; fi
+    assert_contains "$(cat "$PR_REVIEWER_ROOT/uninstall.stdout")" 'pr-reviewer-dashboard'
+    assert_not_contains "$(cat "$PR_REVIEWER_ROOT/uninstall.stdout")" 'Uninstalled.'
+}
+
+test_install_rejects_an_unusable_dashboard_port() {
+    install_setup
+    local port
+    for port in abc 1a 0 00 65536 123456 99999999999999999999; do
+        if DASHBOARD_PORT=$port bash "$INSTALL_SOURCE/install.sh" > "$PR_REVIEWER_ROOT/install.stdout" 2>&1; then fail "accepted $port"; fi
+        assert_contains "$(cat "$PR_REVIEWER_ROOT/install.stdout")" 'DASHBOARD_PORT must be a number from 1 to 65535.'
+    done
+    assert_eq '' "$(cat "$FAKE_LOG")"
+    for port in 1 0080 65535; do
+        DASHBOARD_PORT=$port bash "$INSTALL_SOURCE/install.sh" > /dev/null || fail "rejected $port"
+    done
+}
