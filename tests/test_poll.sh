@@ -7,7 +7,8 @@ poll_setup() {
     export PR_REVIEWER_CONFIG="$PR_REVIEWER_ROOT/config.sh"
     mkdir -p "$PR_REVIEWER_ROOT/state"
     printf '2026-01-01T00:00:00Z\n' > "$PR_REVIEWER_ROOT/state/started-at"
-    printf 'REPOS=(o/r)\nTRUSTED_USERS=(alice)\n' > "$PR_REVIEWER_CONFIG"
+    : > "$PR_REVIEWER_CONFIG"
+    printf '{"repos":[{"repo":"o/r","trusted_users":["alice"]}]}\n' > "$PR_REVIEWER_ROOT/repos.json"
     cp "$source_root/tests/fixtures/prs.json" "$FAKE_GH_PRS"
     : > "$FAKE_LOG"
     export REVIEW_SH="$PR_REVIEWER_ROOT/dispatch" MEMORIZE_SH="$PR_REVIEWER_ROOT/dispatch"
@@ -78,4 +79,21 @@ test_poll_invalid_response_logs_error() {
     printf 'invalid json' > "$FAKE_GH_PRS"
     bash "$POLL_SCRIPT" || fail invalid
     assert_contains "$(cat "$PR_REVIEWER_ROOT/state/poll.log")" 'Invalid response'
+}
+
+test_poll_trust_is_per_repo() {
+    poll_setup
+    printf '{"repos":[{"repo":"o/r","trusted_users":["bob"]},{"repo":"o/other","trusted_users":["alice"]}]}\n' > "$PR_REVIEWER_ROOT/repos.json"
+    bash "$POLL_SCRIPT" || fail poll
+    local dispatched="$(cat "$PR_REVIEWER_ROOT/dispatched")"
+    assert_contains "$dispatched" 'full o/other 7 last'
+    assert_not_contains "$dispatched" 'o/r 7'
+}
+
+test_poll_skips_disabled_and_unlisted_repos() {
+    poll_setup
+    printf '{"repos":[{"repo":"o/r","enabled":false,"trusted_users":["alice"]}]}\n' > "$PR_REVIEWER_ROOT/repos.json"
+    bash "$POLL_SCRIPT" || fail poll
+    assert_eq '' "$(cat "$FAKE_LOG")"
+    [ ! -e "$PR_REVIEWER_ROOT/dispatched" ] || fail dispatched
 }

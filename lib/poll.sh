@@ -29,18 +29,28 @@ dispatch_trigger() {
     esac
 }
 
+# Calls "$1" once per nonblank line of "$2", with stdin closed.
+for_each_line() {
+    local line
+    while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        "$1" "$line" < /dev/null
+    done <<< "$2"
+}
+
+dispatch_or_log() {
+    dispatch_trigger "$1" || log "Dispatch failed: $1"
+}
+
 poll_repo() {
-    local response triggers trusted seen trigger
+    local response triggers trusted seen
     response="$(fetch_open_prs "$1")" || { log "Fetch failed: $1"; return; }
-    trusted="$(printf '%s\n' ${TRUSTED_USERS[@]+"${TRUSTED_USERS[@]}"} | jq -Rsc 'split("\n") | map(select(length > 0))')"
+    trusted="$(repo_trusted_users "$1" | jq -Rsc 'split("\n") | map(select(length > 0))')"
     state_init seen '[]'
     seen="$(cat "$STATE_DIR/seen.json")"
     triggers="$(printf '%s' "$response" | jq -c -L "${LIB_ROOT:-$ROOT}/lib" --arg repo "$1" --arg prefix "$CMD_PREFIX" --arg watermark "$(cat "$STATE_DIR/started-at")" --argjson trusted "$trusted" --argjson seen "$seen" '
         include "select"; select_triggers($repo; $prefix; $trusted; $watermark; $seen)[]')" || { log "Invalid response: $1"; return; }
-    while IFS= read -r trigger; do
-        [ -n "$trigger" ] || continue
-        dispatch_trigger "$trigger" < /dev/null || log "Dispatch failed: $trigger"
-    done <<< "$triggers"
+    for_each_line dispatch_or_log "$triggers"
 }
 
 poll_main() {
@@ -48,6 +58,5 @@ poll_main() {
     printf '%s\n' "$$" > "$STATE_DIR/poll.lock/pid"
     trap 'rm -rf "$STATE_DIR/poll.lock"' EXIT
     [ -s "$STATE_DIR/started-at" ] || { log 'Missing state/started-at; run install.sh'; return 1; }
-    local repo
-    for repo in ${REPOS[@]+"${REPOS[@]}"}; do poll_repo "$repo"; done
+    for_each_line poll_repo "$(repos_enabled)"
 }

@@ -46,7 +46,7 @@
 
 ### Task 2: Poll uses per-repo trust
 
-**Files:** modify `lib/poll.sh`, `lib/common.sh` (drop global `is_trusted`/`REPOS`), tests.
+**Files:** modify `poll.sh`, `lib/poll.sh`, tests. The global `is_trusted` stays until Task 3 (`lib/decide.sh` still uses it); `REPOS`/`TRUSTED_USERS` leave `common.sh`/`config.example.sh` in Task 4.
 
 - [ ] Failing test: user trusted only in A commenting in B is ignored; polling iterates `repos_enabled`.
 - [ ] Feed `repo_trusted_users` into `select_triggers`; commit `feat(poll): trust and repos come from repos.json`.
