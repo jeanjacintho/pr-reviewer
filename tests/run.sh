@@ -8,6 +8,7 @@ export PR_REVIEWER_ROOT="${PR_REVIEWER_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 FILTER="${1:-}"
 TEST_TMP_ROOT="$(mktemp -d)"
 export TEST_TMP_ROOT
+export PR_REVIEWER_CONFIG="$TEST_TMP_ROOT/config-absent"
 trap 'rm -rf "$TEST_TMP_ROOT"' EXIT
 
 . "$TESTS_DIR/helpers.sh"
