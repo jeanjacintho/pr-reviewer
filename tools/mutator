@@ -1,0 +1,175 @@
+#!/usr/bin/perl
+# mutator: applies one small mutation at a time to the project's Bash and
+# jq code inside a scratch copy, runs the tests, and lists every mutant the
+# tests let survive.
+use strict;
+use warnings;
+use FindBin;
+use lib "$FindBin::Bin/lib";
+use Quality;
+use Cwd qw(realpath);
+use File::Basename qw(dirname);
+use File::Copy qw(copy);
+use File::Path qw(make_path);
+use File::Temp qw(tempdir);
+use Getopt::Long;
+use POSIX qw(setpgid);
+
+my $USAGE = <<'TXT';
+usage: tools/mutator [--test-cmd CMD] [--timeout SECS] [--since REF] [--root DIR] [FILE...]
+  Lists surviving mutants and exits 1 when there is any, 2 when the tests
+  fail before mutation.
+  --test-cmd  command run from the root (default: bash tests/run.sh)
+  --timeout   seconds per test run; a mutant that hangs counts as killed (default 300)
+  --since     only mutate lines changed since this git ref (working tree included)
+  FILE...     files relative to the root (default: all project Bash and jq files)
+TXT
+
+my $NOT_FLAG = qr/(?![\w-])/;
+my @BASH_OPS = (
+    ['==', '!='], ['!=', '=='],
+    (map { [qr/(?<![\w-])$_->[0]$NOT_FLAG/, $_->[1], $_->[0]] }
+         ['-eq', '-ne'], ['-ne', '-eq'], ['-lt', '-ge'], ['-ge', '-lt'], ['-gt', '-le'], ['-le', '-gt']),
+    ['&&', '||'], ['||', '&&'],
+    [qr/\[\[?\s+\K-z(?=\s)/, '-n', '-z'], [qr/\[\[?\s+\K-n(?=\s)/, '-z', '-n'],
+    [qr/\b(?:return|exit) \K0\b/, '1', '0'], [qr/\b(?:return|exit) \K1\b/, '0', '1'],
+    [qr/\btrue\b/, 'false', 'true'], [qr/\bfalse\b/, 'true', 'false'],
+    [qr/^\s*(?:el)?if\s+(?!!)\K|^\s*(?:while|until)\s+(?!!)\K/, '! ', 'if'],
+);
+my @JQ_OPS = (
+    ['==', '!='], ['!=', '=='],
+    [qr/\band\b/, 'or', 'and'], [qr/\bor\b/, 'and', 'or'],
+    [qr/\btrue\b/, 'false', 'true'], [qr/\bfalse\b/, 'true', 'false'],
+);
+
+my ($test_cmd, $timeout, $since, $root, $help) = ('bash tests/run.sh', 300, undef, '.', 0);
+GetOptions('test-cmd=s' => \$test_cmd, 'timeout=i' => \$timeout, 'since=s' => \$since,
+           'root=s' => \$root, 'help' => \$help) or die $USAGE;
+if ($help) { print $USAGE; exit 0; }
+$root = realpath($root);
+
+my $copy = scratch_copy($root);
+if (run_tests($copy) ne 'passed') {
+    print STDERR "mutator: tests fail before mutation: $test_cmd\n";
+    exit 2;
+}
+
+my @files = @ARGV ? @ARGV : Quality::source_files($root, 1);
+my ($total, $killed, $timed_out, @survivors) = (0, 0, 0);
+for my $file (@files) {
+    my @lines = Quality::read_lines("$root/$file");
+    my $changed = defined $since ? changed_lines($file) : undef;
+    for my $m (mutants($file, \@lines, $changed)) {
+        $total++;
+        my $result = try_mutant($file, \@lines, $m);
+        $killed++ if $result ne 'passed';
+        $timed_out++ if $result eq 'timeout';
+        push @survivors, $m if $result eq 'passed';
+    }
+}
+
+for my $m (@survivors) {
+    (my $text = $m->{original}) =~ s/^\s+//;
+    printf "SURVIVED %s:%d  %s -> %s  |  %s\n", @$m{qw(file line from to)}, $text;
+}
+printf "mutants: %d  killed: %d  survived: %d  timed out: %d\n",
+       $total, $killed, scalar @survivors, $timed_out;
+exit(@survivors ? 1 : 0);
+
+sub scratch_copy {
+    my ($src) = @_;
+    my $dst = tempdir(CLEANUP => 1);
+    my @list = -d "$src/.git"
+        ? split /\0/, `git -C "$src" ls-files -z -co --exclude-standard`
+        : map { substr($_, length($src) + 1) } split /\n/, `find "$src" -type f -not -path '*/.git/*'`;
+    for my $rel (@list) {
+        next unless -f "$src/$rel";
+        make_path(dirname("$dst/$rel"));
+        copy("$src/$rel", "$dst/$rel") or die "copy $rel: $!\n";
+        chmod((stat "$src/$rel")[2] & 07777, "$dst/$rel");
+    }
+    return $dst;
+}
+
+# 'passed', 'failed' or 'timeout' for one run of the test command.
+sub run_tests {
+    my ($dir) = @_;
+    my $pid = fork() // die "fork: $!\n";
+    if ($pid == 0) {
+        setpgid(0, 0);
+        chdir $dir or exit 127;
+        open STDOUT, '>', '/dev/null';
+        open STDERR, '>', '/dev/null';
+        exec 'bash', '-c', $test_cmd;
+        exit 127;
+    }
+    my $status;
+    eval {
+        local $SIG{ALRM} = sub { die "timeout\n" };
+        alarm $timeout;
+        waitpid($pid, 0);
+        $status = $?;
+        alarm 0;
+    };
+    if ($@) {
+        kill 'KILL', -$pid;
+        waitpid($pid, 0);
+        return 'timeout';
+    }
+    return $status == 0 ? 'passed' : 'failed';
+}
+
+sub changed_lines {
+    my ($file) = @_;
+    my %lines;
+    if (system("git -C \"$root\" ls-files --error-unmatch -- \"$file\" >/dev/null 2>&1") != 0) {
+        return undef;    # untracked: every line is new
+    }
+    for (split /\n/, `git -C "$root" diff -U0 "$since" -- "$file"`) {
+        next unless /^@@ -\S+ \+(\d+)(?:,(\d+))? @@/;
+        $lines{$_} = 1 for $1 .. $1 + ($2 // 1) - 1;
+    }
+    return \%lines;
+}
+
+sub mutants {
+    my ($file, $lines, $changed) = @_;
+    my @ops = $file =~ /\.jq$/ ? @JQ_OPS : @BASH_OPS;
+    my @code = Quality::code_flags(@$lines);
+    my @found;
+    for my $i (0 .. $#$lines) {
+        next unless $code[$i] && (!$changed || $changed->{$i + 1});
+        my $masked = Quality::masked($lines->[$i]);
+        for my $op (@ops) {
+            my ($pattern, $to, $from) = @$op;
+            $from //= $pattern;
+            $pattern = qr/\Q$pattern\E/ unless ref $pattern;
+            while ($masked =~ /$pattern/g) {
+                my ($start, $len) = ($-[0], $+[0] - $-[0]);
+                my $line = $lines->[$i];
+                substr($line, $start, $len) = $to;
+                push @found, { file => $file, line => $i + 1, from => $len ? $from : 'cond',
+                               to => $len ? $to : '! cond', original => $lines->[$i], mutated => $line };
+                pos($masked) = $start + 1 unless $len;
+            }
+        }
+    }
+    return @found;
+}
+
+sub try_mutant {
+    my ($file, $lines, $m) = @_;
+    my @mutated = @$lines;
+    $mutated[$m->{line} - 1] = $m->{mutated};
+    write_lines("$copy/$file", @mutated);
+    my $result = run_tests($copy);
+    write_lines("$copy/$file", @$lines);
+    return $result;
+}
+
+sub write_lines {
+    my ($path, @lines) = @_;
+    open my $fh, '>', $path or die "write $path: $!\n";
+    print $fh map { "$_\n" } @lines;
+    close $fh;
+}
