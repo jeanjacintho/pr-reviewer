@@ -1,0 +1,131 @@
+#!/usr/bin/perl
+# crapper: CRAP score for every Bash function in the project.
+#   CRAP = complexity^2 * (1 - coverage)^3 + complexity
+# Coverage comes from running the test command with a DEBUG trap that logs
+# every executed file:line.
+use strict;
+use warnings;
+use FindBin;
+use lib "$FindBin::Bin/lib";
+use Quality;
+use Cwd qw(realpath);
+use File::Temp qw(tempdir);
+use Getopt::Long;
+
+my $USAGE = <<'TXT';
+usage: tools/crapper [--threshold N] [--test-cmd CMD] [--root DIR] [FILE...]
+  Reports CRAP per function, highest first. Exits 1 when any function
+  scores at or above the threshold (default 10), 2 when the tests fail.
+  --test-cmd  command run from the root to collect coverage (default: bash tests/run.sh)
+  FILE...     files relative to the root (default: all project Bash files)
+TXT
+
+my ($threshold, $test_cmd, $root, $help) = (10, 'bash tests/run.sh', '.', 0);
+GetOptions('threshold=f' => \$threshold, 'test-cmd=s' => \$test_cmd,
+           'root=s' => \$root, 'help' => \$help) or die $USAGE;
+if ($help) { print $USAGE; exit 0; }
+$root = realpath($root);
+
+my @files = @ARGV ? @ARGV : Quality::source_files($root, 0);
+my $covered = collect_coverage($root, $test_cmd);
+my @rows = sort { $b->{crap} <=> $a->{crap} || $a->{where} cmp $b->{where} }
+           map { analyze($root, $_, $covered) } @files;
+
+printf "%7s %10s %8s  %s\n", 'CRAP', 'COMPLEXITY', 'COVERAGE', 'FUNCTION  LOCATION';
+printf "%7.1f %10d %7.0f%%  %s  %s\n", @$_{qw(crap complexity pct name where)} for @rows;
+my $over = grep { $_->{crap} >= $threshold } @rows;
+printf "%d functions, %d at or above CRAP %s\n", scalar @rows, $over, $threshold;
+exit($over ? 1 : 0);
+
+sub collect_coverage {
+    my ($dir, $cmd) = @_;
+    my $tmp = tempdir(CLEANUP => 1);
+    open my $env, '>', "$tmp/env.sh" or die $!;
+    print $env "set -T\n",
+        q{trap 'printf "%s|%s|%s\n" "$PWD" "${BASH_SOURCE[0]}" "$LINENO" >>"$CRAPPER_TRACE"' DEBUG}, "\n";
+    close $env;
+    local $ENV{BASH_ENV} = "$tmp/env.sh";
+    local $ENV{CRAPPER_TRACE} = "$tmp/trace";
+    my $status = system('bash', '-c', "cd \"\$1\" && { $cmd; } >\"\$2\" 2>&1", 'crapper', $dir, "$tmp/test.log");
+    if ($status != 0) {
+        print STDERR "crapper: test command failed (exit ", $status >> 8, "): $cmd\n";
+        system('tail', '-n', '20', "$tmp/test.log");
+        exit 2;
+    }
+    my (%seen, %real);
+    open my $trace, '<', "$tmp/trace" or return \%seen;
+    while (my $entry = <$trace>) {
+        chomp $entry;
+        my ($pwd, $src, $line) = split /\|/, $entry, 3;
+        next unless defined $line && $src ne '';
+        my $path = $src =~ m{^/} ? $src : "$pwd/$src";
+        $real{$path} //= realpath($path) // $path;
+        $seen{"$real{$path}:$line"} = 1;
+    }
+    return \%seen;
+}
+
+sub analyze {
+    my ($dir, $file, $covered) = @_;
+    my $abs = realpath("$dir/$file") // "$dir/$file";
+    my @lines = Quality::read_lines($abs);
+    my @code = Quality::code_flags(@lines);
+    my @rows;
+    for (my $i = 0; $i < @lines; $i++) {
+        next unless $code[$i];
+        my $name = function_name($lines[$i]) or next;
+        my $end = $i;
+        if ($lines[$i] !~ /\}\s*;?\s*$/) {
+            $end++ while $end + 1 < @lines && $lines[$end + 1] !~ /^\}/;
+            $end++;
+        }
+        my @body = $end > $i ? ($i + 1 .. $end - 1) : ($i);
+        push @rows, score($name, "$file:" . ($i + 1), $abs, \@lines, \@code, \@body, $covered);
+        $i = $end;
+    }
+    return @rows;
+}
+
+sub function_name {
+    my ($line) = @_;
+    return $1 if $line =~ /^(?:function\s+)?([A-Za-z_][\w:.-]*)\s*\(\)\s*\{/;
+    return $1 if $line =~ /^function\s+([A-Za-z_][\w:.-]*)\s*\{/;
+    return undef;
+}
+
+sub score {
+    my ($name, $where, $abs, $lines, $code, $body, $covered) = @_;
+    my ($complexity, $exec, $hit) = (1, 0, 0);
+    for my $n (executable_lines($lines, $code, $body)) {
+        $exec++;
+        $hit++ if $covered->{"$abs:" . ($n + 1)};
+    }
+    for my $n (@$body) {
+        next unless $code->[$n];
+        my $m = Quality::masked($lines->[$n]);
+        $complexity++ while $m =~ /\b(?:if|elif|while|until|for)\b|&&|\|\||;;/g;
+    }
+    my $cov = $exec ? $hit / $exec : 1;
+    return { name => $name, where => $where, complexity => $complexity, pct => 100 * $cov,
+             crap => $complexity ** 2 * (1 - $cov) ** 3 + $complexity };
+}
+
+# Body lines a DEBUG trap can report: skips heredocs, structural keywords,
+# case patterns, continuation lines and multi-line array elements.
+sub executable_lines {
+    my ($lines, $code, $body) = @_;
+    my (@exec, $in_array, $continued);
+    for my $n (@$body) {
+        next unless $code->[$n];
+        (my $t = Quality::masked($lines->[$n])) =~ s/^\s+|\s+$//g;
+        next if $t eq '';
+        if ($in_array) { $in_array = 0 if $t eq ')'; next; }
+        my $skip = $continued
+            || $t =~ /^(?:then|else|fi|do|done|esac|;;&?|;&|\{|\}|\)|in)$/
+            || ($t =~ /^\(?[^()]*\)$/ && $t !~ /^\)/);
+        $continued = $t =~ /(?:\\|\||&&)$/;
+        $in_array = 1 if $t =~ /=\($/;
+        push @exec, $n unless $skip;
+    }
+    return @exec;
+}
