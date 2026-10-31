@@ -5,7 +5,7 @@
 - Read AGENTS.md, the design, the implementation plan and the local ub-mode skill before changing code. The initial working tree was clean at `e3eb347`; only development tooling existed.
 - Implemented the eight plan tasks in order. Wrote behavioral tests before new implementations, observed the expected failures, and refined the implementation using independent reviews and mutation results.
 - Kept later tasks out of each commit using temporary Git stashes. Restored future files without overwriting newer fixes; resolved earlier stash conflicts in favor of the already-tested committed versions. No extra development worktree remains.
-- All scripts and prompts were written in this project. Tests use local Git fixtures and fake gh, Codex, launchctl and fault-injection cp commands; no test calls real GitHub or a real model.
+- All scripts and prompts were written in this project. The automated suite uses local Git fixtures and fake gh, Codex, launchctl and fault-injection cp commands; only the separately authorized live smoke calls real GitHub and Codex.
 
 ## Changes and reasons
 
@@ -23,7 +23,7 @@
 - Inspected installed CLI help and feature flags; the installed version is `codex-cli 0.166.0`.
 - Applied the OpenAI Docs skill and read the [official configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference). App/connector traffic is outside command sandbox network controls, so the bot explicitly disables apps, plugins, hooks, browser/image generation, web search, extra agents and every configured MCP server.
 - A local `codex mcp list --json` reads configuration without inference. Session-specific flags keep project configuration untrusted and disable automatic AGENTS.md loading while retaining account authentication and model preferences. Text-only learning sessions also disable shell and image-reading tools.
-- Checked the flags locally without starting a real review or changing user configuration. The real GitHub/model smoke test remains a separate operational step.
+- Initial flag checks were local and did not change user configuration. Subsequent authorized live reviews and learning are documented below.
 
 ## Verification and commits
 
@@ -42,22 +42,41 @@ Every code commit received an independent `tools/review --engine claude` review 
 
 The installer tests explicitly require a valid first-install timestamp and preserve an older timestamp on reinstall, so the assertion does not depend on clock timing. A focused mutation run killed all eight installation/uninstallation mutants. The final full gate passed all 86 tests, with no complexity or duplication violations and all eight changed-line operation mutants killed.
 
-## Operational follow-up
+## Operational status
 
-The plan's live smoke test explicitly requires Jean: choose a scratch repository, activate launchd, create a small PR, and publish the full-review, update-review and memorize commands. No launchd job has been activated and no smoke-test PR/comment has been published. This step remains unchecked in the plan pending repository selection and authorization for those GitHub writes.
+The authorized live smoke passed on PR [#1](https://github.com/jeanjacintho/pr-reviewer/pull/1), which was closed without merging. The active installation is `~/Library/Application Support/pr-reviewer`; its config watches only `jeanjacintho/pr-reviewer`, trusts `jeanjacintho`, and runs the configured Bash test suite for trusted PR authors. Launchd remains loaded with a 120-second interval.
 
-## Final local status
+## Initial local delivery
 
 - All eight implementation tasks have passing gates and independent reviews. The final Bash syntax check and `git diff --check` passed.
 - GitHub CLI and Codex CLI authentication checks passed; no login or user configuration was changed.
 - Code commits, in order: `391201c`, `4f2ed5b`, `fb3746c`, `f14ac46`, `b8de821`, `738fe35`, `8a71eca`, `9a69753` (the final operations commit can also be identified by `feat(launchd): install and operate the personal reviewer`).
 - Temporary Git stashes were removed and only the original `main` worktree remains. The configured publication target is `origin/main` at `https://github.com/jeanjacintho/pr-reviewer.git`.
-- Live launchd/GitHub validation remains pending as described above; installation files and test PR comments were not published or activated during local validation.
+- At the initial local delivery, live activation was intentionally pending. Jean subsequently authorized it; the completed live result is recorded below.
 
-## Authorized live smoke — in progress
+## Authorized live smoke — completed
 
 - Jean authorized creating the disposable PR and leaving the Mac service active.
 - Created PR [#1](https://github.com/jeanjacintho/pr-reviewer/pull/1) with a documentation-only fixture. The initial launchd job could not read scripts from the Documents checkout (`Operation not permitted`). Unloaded that job and installed a separate checkout at `~/Library/Application Support/pr-reviewer`, preserving configuration and the original installation watermark.
 - The relocated job received the review command, prepared separate review/test worktrees, and posted exactly one failure reply. Later polling cycles did not retry the seen command.
 - Diagnosed actual CLI configuration loading outside the bot's publication path. Quoted names in dotted override paths created a new MCP entry without transport configuration. Root TOML table values preserve server names and project paths correctly; a real configuration listing and a real read-only Codex diagnostic succeeded with the correction.
 - Extended the fake CLI to reject that malformed override and pinned a combined table for two MCP servers, including a name containing a dot. The regression failed before the code fix and passed after it.
+
+The live compatibility fix was committed as `b8e1ae0`, independently reviewed with an OK verdict, and passed the full 86-test gate with 1/1 changed-line mutants killed. The inactive Documents configuration was archived under the development checkout's ignored state directory; the installed copy owns the active configuration and learned rules.
+
+| Live check | Evidence | Result |
+| --- | --- | --- |
+| Full review | [Command](https://github.com/jeanjacintho/pr-reviewer/pull/1#issuecomment-6546769913), [reply](https://github.com/jeanjacintho/pr-reviewer/pull/1#issuecomment-6546788127) | APPROVE at `183fe0f`; 86 tests passed; HOORAY reaction |
+| Incremental review | [Command](https://github.com/jeanjacintho/pr-reviewer/pull/1#issuecomment-6546816441), [reply](https://github.com/jeanjacintho/pr-reviewer/pull/1#issuecomment-6546840378) | Since `183fe0f → 6aa2108`; APPROVE; 86 tests passed; HOORAY reaction |
+| Unchanged update | [Reply](https://github.com/jeanjacintho/pr-reviewer/pull/1#issuecomment-6546886755) | Exact no-new-commits reply, unchanged baseline, THUMBS_UP reaction |
+| Explicit learning | [Reply](https://github.com/jeanjacintho/pr-reviewer/pull/1#issuecomment-6546888460) | English rule persisted with `jeanjacintho/pr-reviewer#1` provenance, original empty file backed up, THUMBS_UP reaction |
+| At-most-once handling | Snapshot in ignored `state/smoke-comments.json`; installed `state/seen.json` | Five commands, five replies including the initial CLI failure; no extra comments after a quiet poll |
+| Cleanup and operation | PR CLOSED; temporary local/remote branch and development worktree removed; installed worktree directory empty | Service remains loaded, last exit code 0, interval 120 seconds |
+
+Automatic dispatch latency for the successful commands was within 120 seconds: full review 59 seconds, incremental review 88 seconds, unchanged update 108 seconds, and lesson learning 111 seconds. Reviews and learning then completed in their normal processing time.
+
+The installed lesson is:
+
+> Report correctness bugs only when you can identify a concrete failing path and cite current file:line references; exclude style-only changes. (from jeanjacintho/pr-reviewer#1)
+
+The installed checkout intentionally retains the learned `lessons.md` as local operational data. Its ignored `config.sh`, state, logs and repository cache were preserved. The development checkout remains separate and clean after committing this record.

@@ -13,6 +13,8 @@ is needed to run the bot.
 Use an installed checkout outside macOS-protected Documents/Desktop folders.
 The live smoke test found that launchd could not read this project from Documents.
 Keep the development checkout separate from the active installation.
+Run operational commands and edit config.sh, rules.md and lessons.md in that
+installed checkout; it owns the active state and repository caches.
 
 To configure and start:
 

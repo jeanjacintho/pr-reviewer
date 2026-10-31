@@ -4,7 +4,7 @@
 
 **Goal:** A personal PR review bot on macOS: a launchd poller sees `/jeanjacintho-review`, `/jeanjacintho-update-review` and `/jeanjacintho-memorize` comments from trusted users, runs one `codex exec` per command, and posts one English comment.
 
-**Implementation status:** Tasks 1–8 are implemented and locally validated. Task 8's live smoke remains pending Jean's scratch-repository selection and authorization.
+**Implementation status:** Tasks 1–8 and the authorized live smoke are complete. The launchd service is active from `~/Library/Application Support/pr-reviewer`; see the implementation log for evidence.
 
 **Architecture:** Plain Bash 3.2 scripts. Pure decision logic (command parsing, trigger selection, mode resolution, test gating, output validation) lives in small sourced `lib/*.sh` files and one `lib/select.jq`, unit-tested with a dependency-free runner. Side-effecting entrypoints (`poll.sh`, `review.sh`, `memorize.sh`) call `gh`, `git` and `codex` through `PATH`, so integration tests swap in fake binaries from `tests/fakes/`.
 
@@ -271,5 +271,5 @@ Already on `main`: `AGENTS.md`/`CLAUDE.md`, the `ub-mode` skill, the `quality-ga
 
 - [x] **Step 1:** Implement the three files. Run `bash -n` on every `.sh` → no output.
 - [x] **Step 2:** `bash tests/run.sh` → all `ok`.
-- [ ] **Step 3: Live smoke (with Jean):** set `REPOS` to a scratch repo of Jean's, run `./install.sh`, open a small PR, comment `/jeanjacintho-review`; within ~2 min expect 👀, then one English review ending in `VERDICT:`; push a commit and comment `/jeanjacintho-update-review` → "Since last review" line; comment `/jeanjacintho-memorize <lesson>` → `Learned:` reply and new line in `lessons.md`. Check `state/poll.log`.
+- [x] **Step 3: Live smoke (with Jean):** set `REPOS` to a scratch repo of Jean's, run `./install.sh`, open a small PR, comment `/jeanjacintho-review`; within ~2 min expect 👀, then one English review ending in `VERDICT:`; push a commit and comment `/jeanjacintho-update-review` → "Since last review" line; comment `/jeanjacintho-memorize <lesson>` → `Learned:` reply and new line in `lessons.md`. Check `state/poll.log`.
 - [x] **Step 4: Quality gate, then commit** `feat: add launchd install and README`
