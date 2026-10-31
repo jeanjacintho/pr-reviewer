@@ -13,7 +13,7 @@ is needed to run the bot.
 Use an installed checkout outside macOS-protected Documents/Desktop folders.
 The live smoke test found that launchd could not read this project from Documents.
 Keep the development checkout separate from the active installation.
-Run operational commands and edit config.sh, rules.md and lessons.md in that
+Run operational commands and edit config.sh, repos.json, rules.md and lessons.md in that
 installed checkout; it owns the active state and repository caches.
 
 To configure and start:
@@ -21,12 +21,15 @@ To configure and start:
 ```bash
 git clone https://github.com/jeanjacintho/pr-reviewer.git "$HOME/Library/Application Support/pr-reviewer"
 cd "$HOME/Library/Application Support/pr-reviewer"
-cp config.example.sh config.sh
-# Edit config.sh: choose repositories, trusted people and optional test commands.
 ./install.sh
+# Edit repos.json: choose repositories, trusted people, models and optional test commands.
 ```
 
 Install is idempotent: it preserves configuration and the first-install watermark.
+A first install creates `config.sh` and `repos.json` from the examples. An
+installation that still has the old `REPOS`, `TRUSTED_USERS` and `TEST_CMDS`
+arrays in `config.sh` gets an equivalent `repos.json` once; an existing
+`repos.json` is never overwritten.
 It registers `~/Library/LaunchAgents/com.jeanjacintho.pr-reviewer.plist` with a
 120-second interval. Keep this checkout in place while installed. Its path may
 contain spaces. Launchd's PATH includes Homebrew and `~/.local/bin`; put CLI
@@ -52,20 +55,27 @@ are ignored. A failed command is not retried automatically: comment again.
 The script attempts at most one comment publication per command; if GitHub's
 response is ambiguous, it does not retry and risk a duplicate. Check local logs.
 
-Configuration (`config.sh`, ignored by Git):
+Global settings (`config.sh`, ignored by Git):
 
 | Setting | Meaning |
 | --- | --- |
 | `CMD_PREFIX` | Command namespace; defaults to `jeanjacintho` |
-| `REPOS` | Explicit `owner/repo` Bash array; only these repositories are watched |
-| `TRUSTED_USERS` | Case-insensitive GitHub login array for commenters and test authors |
 | `REVIEW_TIMEOUT_SECS` | Codex review limit; default 1200 seconds |
 | `TEST_TIMEOUT_SECS` | Configured test command limit; default 900 seconds |
-| `TEST_CMDS` | Optional array of `owner/repo\|command` strings; may be empty |
-| `CODEX_MODEL` | Optional model override; empty uses Codex's configured default |
+| `CODEX_MODEL` | Default model for repositories that set none; empty uses Codex's configured default |
+
+Per-repository settings (`repos.json`, ignored by Git, read on every poll cycle):
+
+| Field | Meaning |
+| --- | --- |
+| `repo` | `owner/name`; only listed, enabled repositories are watched |
+| `enabled` | `false` keeps the entry but stops polling it; default `true` |
+| `trusted_users` | Case-insensitive GitHub logins for commenters and test authors in this repository only |
+| `model` | Codex model for this repository; empty uses `CODEX_MODEL` |
+| `test_cmd` | Optional shell command run for trusted authors' PRs; empty means tests are not configured |
 
 The commenter controls authorization to review. Tests additionally require the
-**PR author** to be trusted and an explicit command in `TEST_CMDS`. Test commands
+**PR author** to be trusted and a `test_cmd` for the repository. Test commands
 come from local config, never from PR text. They run in a separate disposable
 worktree at the same SHA, with a timeout. Their exit code and last 200 log lines
 are supplied to Codex; Codex does not execute tests itself. An untrusted author's

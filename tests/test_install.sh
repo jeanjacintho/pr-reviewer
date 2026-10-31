@@ -64,3 +64,29 @@ test_uninstall_succeeds_when_service_already_absent() {
     assert_contains "$(cat "$PR_REVIEWER_ROOT/uninstall.stdout")" 'Uninstalled.'
     assert_contains "$(cat "$FAKE_LOG")" 'launchctl print'
 }
+
+test_install_migrates_legacy_config_once() {
+    install_setup
+    printf 'REPOS=(o/r)\nTRUSTED_USERS=(alice)\n' > "$PR_REVIEWER_ROOT/config.sh"
+    bash "$INSTALL_SOURCE/install.sh" > /dev/null || fail install
+    assert_eq 'o/r' "$(jq -r '.repos[0].repo' "$PR_REVIEWER_ROOT/repos.json")"
+    assert_eq 'alice' "$(jq -r '.repos[0].trusted_users[0]' "$PR_REVIEWER_ROOT/repos.json")"
+    printf '{"repos":[{"repo":"o/edited"}]}\n' > "$PR_REVIEWER_ROOT/repos.json"
+    bash "$INSTALL_SOURCE/install.sh" > /dev/null || fail reinstall
+    assert_eq 'o/edited' "$(jq -r '.repos[0].repo' "$PR_REVIEWER_ROOT/repos.json")"
+}
+
+test_install_fresh_starts_from_the_example() {
+    install_setup
+    bash "$INSTALL_SOURCE/install.sh" > "$PR_REVIEWER_ROOT/install.stdout" || fail install
+    assert_eq "$(jq -S . "$INSTALL_SOURCE/repos.example.json")" "$(jq -S . "$PR_REVIEWER_ROOT/repos.json")"
+    assert_contains "$(cat "$PR_REVIEWER_ROOT/install.stdout")" 'repos.json'
+}
+
+test_install_failed_migration_leaves_no_repos_file() {
+    install_setup
+    printf 'REPOS=(\n' > "$PR_REVIEWER_ROOT/config.sh"
+    if bash "$INSTALL_SOURCE/install.sh" > /dev/null 2>&1; then fail broken_config_installed; fi
+    [ ! -e "$PR_REVIEWER_ROOT/repos.json" ] || fail partial_repos_json
+    assert_eq '' "$(ls -A "$PR_REVIEWER_ROOT" | grep 'repos' || true)"
+}

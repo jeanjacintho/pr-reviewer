@@ -22,6 +22,19 @@ write_launch_plist() {
 PLIST
 }
 
+install_repos_file() {
+    local legacy="$1"
+    [ ! -f "$ROOT/repos.json" ] || return 0
+    if [ "$legacy" = yes ]; then
+        local next="$ROOT/repos.json.next"
+        migrate_legacy_config "$ROOT/config.sh" > "$next" || { rm -f "$next"; return 1; }
+        mv "$next" "$ROOT/repos.json"
+        printf 'Migrated repositories and trusted users from config.sh to repos.json.\n'
+    else
+        cp "$SOURCE_ROOT/repos.example.json" "$ROOT/repos.json"
+    fi
+}
+
 install_main() {
     local dependency
     for dependency in gh jq git codex perl launchctl; do
@@ -31,11 +44,13 @@ install_main() {
     codex --version
     jq --version
     mkdir -p "$STATE_DIR" "$WORK_DIR" "$LAUNCH_AGENTS_DIR"
-    if [ ! -f "$ROOT/config.sh" ]; then cp "$SOURCE_ROOT/config.example.sh" "$ROOT/config.sh"; fi
+    local legacy=no
+    if [ -f "$ROOT/config.sh" ]; then legacy=yes; else cp "$SOURCE_ROOT/config.example.sh" "$ROOT/config.sh"; fi
+    install_repos_file "$legacy"
     if [ ! -f "$STATE_DIR/started-at" ]; then date -u +%Y-%m-%dT%H:%M:%SZ > "$STATE_DIR/started-at"; fi
     local plist="$LAUNCH_AGENTS_DIR/com.jeanjacintho.pr-reviewer.plist"
     write_launch_plist > "$plist"
     launchctl bootout "gui/$UID/com.jeanjacintho.pr-reviewer" 2>/dev/null || printf 'Launchd bootout failed; continuing installation.\n'
     launchctl bootstrap "gui/$UID" "$plist"
-    printf 'Installed. Configure repositories and trusted users in %s/config.sh.\n' "$ROOT"
+    printf 'Installed. Configure repositories, trusted users and models in %s/repos.json.\n' "$ROOT"
 }

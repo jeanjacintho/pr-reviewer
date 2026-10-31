@@ -62,6 +62,8 @@ O porquê: ter "o meu bot de revisão", com as minhas regras, usando a conta do 
 
 ### Configuração — `config.sh` (gitignored; `config.example.sh` versionado)
 
+> Adendo de 2026-10-31: `REPOS`, `TRUSTED_USERS`, `TEST_CMDS` e `CODEX_MODEL` por repo agora vivem em `repos.json` (seção "Dashboard local"); o bloco abaixo é o formato original.
+
 ```bash
 CMD_PREFIX="jeanjacintho"
 REPOS=(jeanjacintho/motes)                        # owner/repo
