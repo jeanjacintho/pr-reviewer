@@ -77,6 +77,14 @@ test_repos_rejects_path_traversal_names() {
 o/ok' "$(repos_enabled)"
 }
 
+test_repos_rejects_values_with_a_trailing_newline() {
+    repos_setup '{"repos":[{"repo":"o/a\n","trusted_users":["alice"]},{"repo":"o/b","trusted_users":["bob\n","carol"],"model":"m\n"}]}'
+    assert_eq 'o/b' "$(repos_enabled)"
+    assert_eq 'carol' "$(repo_trusted_users o/b)"
+    CODEX_MODEL=global
+    assert_eq global "$(repo_model o/b)"
+}
+
 test_repos_trailing_garbage_discards_everything() {
     repos_setup '{"repos":[{"repo":"o/a","trusted_users":["alice"]}]} trailing'
     assert_eq '' "$(repos_enabled)"

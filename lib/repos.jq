@@ -1,7 +1,7 @@
-def repo_re: "^[A-Za-z0-9-]+/[A-Za-z0-9_.-]+$";
+def repo_re: "^[A-Za-z0-9-]+/[A-Za-z0-9_.-]+\\z";
 def repo_name_ok: test(repo_re) and (split("/")[1] | IN(".", "..") | not);
-def login_re: "^[A-Za-z0-9-]{1,39}$";
-def model_re: "^[A-Za-z0-9._:-]{0,64}$";
+def login_re: "^[A-Za-z0-9-]{1,39}\\z";
+def model_re: "^[A-Za-z0-9._:-]{0,64}\\z";
 
 def entries:
   .repos[]?
