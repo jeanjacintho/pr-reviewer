@@ -8,65 +8,89 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <div class="app">
-    <aside class="nav" aria-label="Navigation">
+  <header class="topbar">
+    <div class="topbar-inner">
       <div class="brand">
         <span class="brand-mark" id="brand-mark"></span>
-        <span class="brand-name">PR Reviewer</span>
+        <div>
+          <div class="brand-name">PR Reviewer</div>
+          <div class="brand-sub" id="local-note">Running only on this Mac</div>
+        </div>
       </div>
-      <fieldset class="bare lockable" disabled>
+      <nav class="segmented" aria-label="Sections">
+        <button class="seg" type="button" data-view="repos">Repositories</button>
+        <button class="seg" type="button" data-view="activity">Activity</button>
+      </nav>
+      <fieldset class="bare lockable topbar-side" disabled>
         <legend class="sr-only">Add</legend>
-        <button id="nav-add" class="nav-item" type="button">Add repository</button>
+        <button id="nav-add" class="btn ink" type="button">Add repository</button>
       </fieldset>
-      <button id="nav-activity" class="nav-item" type="button">Activity</button>
-      <div class="nav-label"><span>Repositories</span><span id="repo-count"></span></div>
-      <fieldset class="bare lockable nav-list" disabled>
-        <legend class="sr-only">Repository list</legend>
-        <div id="repo-list"></div>
-      </fieldset>
-      <div class="nav-footer" id="nav-footer" title="This page only answers on 127.0.0.1">Only on this Mac</div>
-    </aside>
+    </div>
+  </header>
 
-    <main class="content">
-      <div id="load-error" class="banner" role="alert" hidden>
-        <span id="load-error-text"></span>
-        <button id="retry" class="btn" type="button">Try again</button>
+  <main class="main">
+    <div id="load-error" class="banner" role="alert" hidden>
+      <span id="load-error-text"></span>
+      <button id="retry" class="btn" type="button">Try again</button>
+    </div>
+
+    <section id="page-repos" class="view">
+      <div class="layout">
+        <aside class="card side" aria-label="Repositories">
+          <div class="card-head">
+            <h2>Repositories</h2>
+            <span id="repo-count" class="count"></span>
+          </div>
+          <div class="search-wrap">
+            <span id="search-icon"></span>
+            <input id="repo-search" class="search" type="search" placeholder="Search repositories" aria-label="Search repositories" autocomplete="off">
+          </div>
+          <fieldset class="bare lockable" disabled>
+            <legend class="sr-only">Repository list</legend>
+            <div id="repo-list" class="rows"></div>
+          </fieldset>
+        </aside>
+        <fieldset class="bare lockable detail" disabled>
+          <legend class="sr-only">Repository settings</legend>
+          <div id="detail" class="stack"></div>
+        </fieldset>
       </div>
+    </section>
 
-      <fieldset id="page-repos" class="bare lockable page" disabled>
-        <legend class="sr-only">Repository settings</legend>
-        <div id="detail"></div>
-      </fieldset>
-
-      <section id="page-activity" class="page" hidden>
-        <header class="page-head">
-          <div>
-            <p class="eyebrow">Overview</p>
-            <h1>Activity</h1>
-            <p id="activity-summary" class="lede"></p>
-          </div>
-          <div class="head-side">
-            <button id="refresh" class="btn" type="button">Refresh</button>
-            <p id="updated" class="hint"></p>
-          </div>
-        </header>
-        <section class="block">
-          <h2 class="block-title">Recent reviews</h2>
-          <ol id="reviews" class="list"></ol>
-        </section>
-        <section class="block">
-          <div class="block-head">
-            <h2 class="block-title">Bot log</h2>
-            <div class="tools">
-              <input id="log-filter" class="search" type="search" placeholder="Filter" aria-label="Filter log lines">
-              <label class="check"><input id="log-problems" type="checkbox"> Problems only</label>
-            </div>
-          </div>
-          <div id="log" class="console" tabindex="0" aria-label="Bot log"></div>
-        </section>
+    <section id="page-activity" class="view" hidden>
+      <div class="page-title">
+        <div>
+          <h1>Activity</h1>
+          <p id="activity-summary" class="muted"></p>
+        </div>
+        <div class="tools">
+          <span class="select-wrap">
+            <select id="activity-repo" class="select" aria-label="Show activity for"></select>
+            <span class="select-chevron" id="activity-chevron"></span>
+          </span>
+          <button id="refresh" class="btn" type="button">Refresh</button>
+        </div>
+      </div>
+      <div class="stats" id="stats"></div>
+      <section class="card">
+        <div class="card-head">
+          <h2>Reviews</h2>
+          <span id="updated" class="muted small"></span>
+        </div>
+        <div id="reviews"></div>
       </section>
-    </main>
-  </div>
+      <section class="card">
+        <div class="card-head wrap">
+          <h2>Bot log</h2>
+          <div class="tools">
+            <input id="log-filter" class="search sm" type="search" placeholder="Filter lines" aria-label="Filter log lines">
+            <label class="check"><input id="log-problems" type="checkbox"> Problems only</label>
+          </div>
+        </div>
+        <div id="log" class="console" tabindex="0" aria-label="Bot log"></div>
+      </section>
+    </section>
+  </main>
 
   <div id="savebar" class="savebar" hidden>
     <ul id="errors" class="savebar-errors" hidden></ul>
@@ -74,32 +98,31 @@
       <span class="savebar-dot"></span>
       <span id="savebar-text" class="savebar-text"></span>
       <button id="discard" class="btn quiet" type="button">Discard</button>
-      <button id="save" class="btn primary" type="button">Save changes</button>
+      <button id="save" class="btn green" type="button">Save changes</button>
     </div>
   </div>
 
   <dialog id="add-dialog" class="dialog" aria-labelledby="add-title">
     <form id="add-form" novalidate>
       <fieldset class="bare lockable">
-      <legend class="sr-only">New repository</legend>
-      <div class="dialog-head">
-        <h2 id="add-title">Add a repository</h2>
-        <button id="add-close" class="icon-btn" type="button" aria-label="Close"></button>
-      </div>
-      <p class="dialog-desc">The bot will watch it for review commands from the people you trust there. A GitHub link works too.</p>
-      <label class="sr-only" for="add-repo">Repository</label>
-      <input id="add-repo" type="text" placeholder="owner/name" autocomplete="off" spellcheck="false">
-      <p id="add-hint" class="hint">For example octocat/hello-world</p>
-      <div class="dialog-actions">
-        <button id="add-cancel" class="btn" type="button">Cancel</button>
-        <button id="add-button" class="btn primary" type="submit" disabled>Add repository</button>
-      </div>
+        <legend class="sr-only">New repository</legend>
+        <div class="dialog-head">
+          <h2 id="add-title">Add a repository</h2>
+          <button id="add-close" class="icon-btn" type="button" aria-label="Close"></button>
+        </div>
+        <p class="dialog-desc">The bot will watch it for review commands from the people you trust there. A GitHub link works too.</p>
+        <label class="sr-only" for="add-repo">Repository</label>
+        <input id="add-repo" class="field" type="text" placeholder="owner/name" autocomplete="off" spellcheck="false">
+        <p id="add-hint" class="hint">For example octocat/hello-world</p>
+        <div class="dialog-actions">
+          <button id="add-cancel" class="btn" type="button">Cancel</button>
+          <button id="add-button" class="btn green" type="submit" disabled>Add repository</button>
+        </div>
       </fieldset>
     </form>
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-  <datalist id="models"></datalist>
   <script src="/app.js"></script>
 </body>
 </html>

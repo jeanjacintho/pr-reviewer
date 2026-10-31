@@ -5,21 +5,26 @@ const LOGIN_RE = /^[A-Za-z0-9-]{1,39}$/;
 const MODEL_RE = /^[A-Za-z0-9._:-]{0,64}$/;
 const REFRESH_MS = 30000;
 const WEEK_MS = 7 * 24 * 3600 * 1000;
+const CUSTOM = '__custom';
 
 const state = {
   repos: [],
   savedRepos: [],
   selected: '',
+  search: '',
   loaded: false,
   saving: false,
   errors: [],
   errorRepos: new Set(),
+  engines: null,
+  enginesError: '',
   activity: { reviews: [], log: [] },
   activityAt: 0,
   activityError: '',
+  activityRepo: '',
 };
-// Screen-only choices that are not saved: a model mode picked before typing a
-// name, a tests switch turned on before typing a command, a command parked
+// Screen-only choices that are not saved: "Other model" picked before typing
+// a name, a tests switch turned on before typing a command, a command parked
 // while tests are off.
 const customModel = new WeakSet();
 const testsDraft = new WeakSet();
@@ -35,22 +40,19 @@ const ICONS = {
   plus: '<path d="M12 5v14M5 12h14"/>',
   x: '<path d="M18 6 6 18M6 6l12 12"/>',
   check: '<path d="M20 6 9 17l-5-5"/>',
-  pulse: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+  chevron: '<path d="m6 9 6 6 6-6"/>',
   lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   external: '<path d="M7 17 17 7M8 7h9v9"/>',
   refresh: '<path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/>',
   alert: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
-  info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
+  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+  terminal: '<path d="m5 8 4 4-4 4M12 16h7"/>',
+  chat: '<path d="M21 12a8 8 0 0 1-11.6 7.1L3 21l1.9-6.4A8 8 0 1 1 21 12z"/>',
+  eye: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
   trash: '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>',
   undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-1"/>',
-};
-
-// Larger line drawings for choices and empty states.
-const ART = {
-  defaults: '<path d="M7 15h22M37 15h4M7 33h6M21 33h20"/><circle cx="33" cy="15" r="4"/><circle cx="17" cy="33" r="4"/><path d="M7 24h12M27 24h14"/><circle cx="23" cy="24" r="4"/>',
-  specific: '<path d="M7 40 15 26l10 6 13-20"/><circle cx="7" cy="40" r="2.5"/><circle cx="15" cy="26" r="2.5"/><circle cx="25" cy="32" r="2.5"/><path d="M31 11.5 38.5 10l1 7.5"/>',
-  repo: '<circle cx="14" cy="11" r="4.5"/><circle cx="14" cy="37" r="4.5"/><circle cx="34" cy="37" r="4.5"/><path d="M14 15.5v17M34 32.5V22a7 7 0 0 0-7-7h-6"/><path d="m25 10.5-4.5 4.5 4.5 4.5"/>',
-  chat: '<path d="M41 24a16 16 0 0 1-23.4 14.2L8 41l2.8-9.6A16 16 0 1 1 41 24z"/><path d="m18 24 5 5 8-9"/>',
 };
 
 const NODE_PROPS = new Set(['className', 'textContent', 'value', 'checked', 'disabled', 'type', 'href', 'target', 'rel', 'title', 'placeholder', 'id', 'dateTime', 'htmlFor', 'spellcheck', 'autocomplete']);
@@ -67,16 +69,21 @@ function el(tag, props = {}, ...children) {
   return node;
 }
 
-// Only fixed strings from ICONS and ART are ever parsed as markup.
-function drawing(className, viewBox, paths, strokeWidth) {
-  const span = el('span', { className, 'aria-hidden': 'true' });
-  span.innerHTML = `<svg viewBox="${viewBox}" fill="none" stroke="currentColor" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+function icon(name, size = '') {
+  const span = el('span', { className: `icon ${size}`, 'aria-hidden': 'true' });
+  // Only fixed strings from ICONS are ever parsed as markup.
+  span.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`;
   return span;
 }
 
-const icon = (name, size = '') => drawing(`icon ${size}`, '0 0 24 24', ICONS[name], 1.8);
-const art = (name, size = '') => drawing(`art ${size}`, '0 0 48 48', ART[name], 1.6);
-const avatar = (name, size = '') => el('span', { className: `avatar ${size}`, textContent: (String(name)[0] || '?').toUpperCase(), 'aria-hidden': 'true' });
+function tone(name) {
+  let hash = 0;
+  for (const char of key(name)) hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  return (hash % 6) + 1;
+}
+
+const avatar = (name, size = '') => el('span', { className: `avatar av-${tone(name)} ${size}`, textContent: (String(name)[0] || '?').toUpperCase(), 'aria-hidden': 'true' });
+const chip = (kind, text, iconName) => el('span', { className: `chip chip-${kind}` }, iconName && icon(iconName, 'sm'), text);
 
 const relative = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
 const UNITS = [[60, 'second', 1], [3600, 'minute', 60], [86400, 'hour', 3600], [604800, 'day', 86400], [2629800, 'week', 604800], [Infinity, 'month', 2629800]];
@@ -89,6 +96,8 @@ function ago(when) {
   return relative.format(Math.round(seconds / size), unit);
 }
 
+const shortDate = (when) => new Date(when).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
 async function api(path, options) {
   const res = await fetch(path, options);
   const body = await res.json().catch(() => ({}));
@@ -99,8 +108,8 @@ async function api(path, options) {
 let toastTimer;
 function toast(message, action) {
   const box = $('#toast');
-  const parts = [el('span', { textContent: message })];
-  if (action) parts.push(el('button', { type: 'button', className: 'btn quiet', onclick: () => { box.hidden = true; action.run(); } }, icon('undo', 'sm'), action.label));
+  const parts = [icon(action ? 'undo' : 'check'), el('span', { textContent: message })];
+  if (action) parts.push(el('button', { type: 'button', className: 'btn quiet sm', onclick: () => { box.hidden = true; action.run(); } }, action.label));
   box.replaceChildren(...parts);
   box.hidden = false;
   box.classList.remove('show');
@@ -108,6 +117,49 @@ function toast(message, action) {
   box.classList.add('show');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => { box.hidden = true; }, action ? 8000 : 4000);
+}
+
+/* ---------- Engines ---------- */
+
+const engineOf = (id) => (state.engines || []).find((engine) => engine.id === id);
+const engineName = (id) => engineOf(id)?.name || (id === 'claude' ? 'Claude Code' : id === 'codex' ? 'Codex' : id);
+
+function effortsFor(engine, modelId) {
+  if (!engine) return [];
+  const model = engine.models.find((candidate) => candidate.id === (modelId || engine.defaultModel));
+  return model ? model.efforts : [...new Set(engine.models.flatMap((candidate) => candidate.efforts))];
+}
+
+function defaultEffortFor(engine, modelId) {
+  if (!engine) return '';
+  if (!modelId && engine.defaultEffort) return engine.defaultEffort;
+  return engine.models.find((candidate) => candidate.id === (modelId || engine.defaultModel))?.defaultEffort || '';
+}
+
+function engineSummary(repo) {
+  const engine = engineOf(repo.engine);
+  const model = repo.model || (engine?.defaultModel ? engine.defaultModel : 'default model');
+  return [engineName(repo.engine), model, repo.effort].filter(Boolean).join(' · ');
+}
+
+function commandPreview(repo) {
+  const model = repo.model;
+  const effort = repo.effort;
+  if (repo.engine === 'claude') {
+    return ['claude -p --restricted --tools Read,Grep,Glob', model && `--model ${model}`, effort && `--effort ${effort}`].filter(Boolean).join(' ');
+  }
+  return ['codex exec --sandbox read-only', model && `-m ${model}`, effort && `-c model_reasoning_effort=${effort}`].filter(Boolean).join(' ');
+}
+
+async function loadEngines() {
+  try {
+    state.engines = (await api('/api/engines')).engines;
+    state.enginesError = '';
+  } catch (error) {
+    state.engines = [];
+    state.enginesError = error.message;
+  }
+  if (state.loaded) renderDetail();
 }
 
 /* ---------- Change tracking ---------- */
@@ -129,12 +181,10 @@ function changeSummary() {
   return { added, edited, removed: saved.size };
 }
 
-function repoBadge(repo, saved) {
-  if (state.errorRepos.has(key(repo.repo))) return { kind: 'error', text: 'Needs attention' };
+function unsavedState(repo, saved) {
+  if (state.errorRepos.has(key(repo.repo))) return 'error';
   const before = saved.get(key(repo.repo));
-  if (before === undefined) return { kind: 'new', text: 'Not saved yet' };
-  if (before !== JSON.stringify(repo)) return { kind: 'edited', text: 'Unsaved changes' };
-  return null;
+  return before === undefined || before !== JSON.stringify(repo) ? 'unsaved' : '';
 }
 
 function selectedRepo() {
@@ -148,18 +198,18 @@ function select(name) {
   if (view() === 'activity') {
     location.hash = 'repositories';
   } else {
-    renderNav();
+    renderList();
     renderDetail();
   }
-  if (matchMedia('(max-width: 860px)').matches) $('.content').scrollIntoView({ behavior: 'smooth' });
+  if (matchMedia('(max-width: 980px)').matches) $('.detail').scrollIntoView({ behavior: 'smooth' });
 }
 
-// Something in a repository changed: refresh everything except the open page,
+// Something in a repository changed: refresh everything except the open form,
 // so the field being typed in keeps its focus.
 function changed() {
-  renderNav();
+  renderList();
   renderSavebar();
-  renderModels();
+  renderHeroChips();
 }
 
 function setEditable(on) {
@@ -172,50 +222,49 @@ function focusId(id) {
   if (target) target.focus();
 }
 
-/* ---------- Navigation ---------- */
+/* ---------- Repository list ---------- */
 
-function renderNav() {
+function renderList() {
   const list = $('#repo-list');
-  const onActivity = view() === 'activity';
-  $('#nav-activity').classList.toggle('active', onActivity);
-  $('#repo-count').textContent = state.loaded && state.repos.length ? String(state.repos.length) : '';
+  $('#repo-count').textContent = state.loaded ? String(state.repos.length) : '';
   if (!state.loaded) {
-    list.replaceChildren(...[1, 2, 3].map(() => el('div', { className: 'nav-item skeleton' })));
+    list.replaceChildren(...[1, 2, 3].map(() => el('div', { className: 'skeleton row' })));
     return;
   }
-  if (!state.repos.length) {
-    list.replaceChildren(el('p', { className: 'nav-empty', textContent: 'None yet' }));
+  const shown = state.repos.filter((repo) => key(repo.repo).includes(key(state.search)));
+  if (!shown.length) {
+    list.replaceChildren(el('p', { className: 'empty-text', textContent: state.repos.length ? 'No repository matches.' : 'No repositories yet.' }));
     return;
   }
   const current = selectedRepo();
   const saved = savedMap();
-  list.replaceChildren(...state.repos.map((repo) => {
-    const badge = repoBadge(repo, saved);
-    const active = !onActivity && repo === current;
+  list.replaceChildren(...shown.map((repo) => {
+    const [owner, name] = repo.repo.split('/');
+    const mark = unsavedState(repo, saved);
     return el('button', {
       type: 'button',
-      className: `nav-item repo${active ? ' active' : ''}${repo.enabled ? '' : ' paused'}`,
-      'aria-current': active ? 'page' : 'false',
-      title: repo.enabled ? repo.repo : `${repo.repo} (paused)`,
+      className: `row-item${repo === current ? ' selected' : ''}${repo.enabled ? '' : ' paused'}`,
+      'aria-current': String(repo === current),
+      title: repo.repo,
       onclick: () => select(repo.repo),
     },
-    el('span', { className: `status ${repo.enabled ? 'on' : 'off'}` }),
-    el('span', { className: 'nav-text', textContent: repo.repo }),
-    badge && el('span', { className: `mark mark-${badge.kind}`, title: badge.text, 'aria-label': badge.text }));
+    avatar(owner),
+    el('span', { className: 'row-main' },
+      el('span', { className: 'row-title', textContent: name }),
+      el('span', { className: 'row-sub', textContent: `${owner} · ${engineName(repo.engine)}` })),
+    mark && el('span', { className: `dot${mark === 'error' ? ' error' : ''}`, title: mark === 'error' ? 'Needs attention' : 'Unsaved changes' }),
+    repo.enabled ? chip('mint', 'Watching') : chip('gray', 'Paused'));
   }));
 }
 
-function renderModels() {
-  const models = [...new Set(state.repos.map((repo) => repo.model).filter(Boolean))];
-  $('#models').replaceChildren(...models.map((model) => el('option', { value: model })));
-}
+/* ---------- Repository detail ---------- */
 
-/* ---------- Repository page ---------- */
-
-function row(title, description, ...body) {
-  return el('section', { className: 'row' },
-    el('div', { className: 'row-label' }, el('h2', { textContent: title }), el('p', { textContent: description })),
-    el('div', { className: 'row-body' }, ...body));
+function card(title, subtitle, aside, ...body) {
+  return el('section', { className: 'card' },
+    el('div', { className: 'card-head' },
+      el('div', {}, el('h2', { textContent: title }), subtitle && el('p', { className: 'card-sub', textContent: subtitle })),
+      aside),
+    ...body);
 }
 
 function switchControl(on, labels, ariaLabel, onToggle) {
@@ -224,16 +273,35 @@ function switchControl(on, labels, ariaLabel, onToggle) {
     el('span', { textContent: on ? labels[0] : labels[1] }));
 }
 
-function repoHead(repo) {
+const note = (kind, iconName, text) => el('div', { className: `note note-${kind}` }, icon(iconName), el('p', { textContent: text }));
+
+function heroChips(repo) {
+  const people = repo.trusted_users.length;
+  return [
+    chip('purple', engineSummary(repo), 'terminal'),
+    chip(people ? 'blue' : 'orange', people ? `${people} trusted` : 'Nobody trusted', 'users'),
+    repo.test_cmd ? chip('mint', 'Tests on', 'check') : chip('gray', 'No tests'),
+  ];
+}
+
+function renderHeroChips() {
+  const holder = $('#hero-chips');
+  const repo = selectedRepo();
+  if (holder && repo) holder.replaceChildren(...heroChips(repo));
+}
+
+function heroCard(repo) {
   const [owner, name] = repo.repo.split('/');
-  return el('header', { className: 'page-head' },
-    el('div', {},
-      el('p', { className: 'eyebrow', textContent: owner }),
-      el('h1', { textContent: name }),
-      el('a', { className: 'subtle-link', href: `https://github.com/${repo.repo}`, target: '_blank', rel: 'noopener noreferrer' }, 'View on GitHub', icon('external', 'sm'))),
-    el('div', { className: 'head-side' },
-      switchControl(repo.enabled, ['Watching', 'Paused'], `Watch ${repo.repo}`, (on) => { repo.enabled = on; changed(); renderDetail(); }),
-      el('p', { className: 'hint', textContent: repo.enabled ? 'Checked for commands every 2 minutes' : 'Commands here are ignored for now' })));
+  return el('section', { className: 'card' },
+    el('div', { className: 'hero' },
+      avatar(owner, 'lg'),
+      el('div', { className: 'hero-main' },
+        el('p', { className: 'hero-owner', textContent: owner }),
+        el('h1', { textContent: name }),
+        el('div', { className: 'chips', id: 'hero-chips' }, ...heroChips(repo))),
+      el('div', { className: 'hero-side' },
+        switchControl(repo.enabled, ['Watching', 'Paused'], `Watch ${repo.repo}`, (on) => { repo.enabled = on; changed(); renderDetail(); }),
+        el('a', { className: 'gh-link', href: `https://github.com/${repo.repo}`, target: '_blank', rel: 'noopener noreferrer' }, 'Open on GitHub', icon('external', 'sm')))));
 }
 
 function cleanLogin(value) {
@@ -248,20 +316,20 @@ function loginProblem(repo, login) {
 
 const PEOPLE_HINT = 'Press Enter to add. @username or a profile link works too.';
 
-function peopleRow(repo) {
+function peopleCard(repo) {
   const people = repo.trusted_users.length
-    ? el('div', { className: 'people' }, ...repo.trusted_users.map((login) => el('span', { className: 'person' },
-      avatar(login),
-      login,
-      el('button', { type: 'button', className: 'icon-btn', title: `Remove ${login}`, 'aria-label': `Remove ${login}`, onclick: () => {
+    ? el('div', { className: 'people' }, ...repo.trusted_users.map((login) => el('div', { className: 'person' },
+      avatar(login, 'sm'),
+      el('div', { className: 'person-main' }, el('span', { className: 'person-name', textContent: login }), el('span', { className: 'person-role', textContent: 'Can start reviews' })),
+      el('button', { type: 'button', className: 'icon-btn remove', title: `Remove ${login}`, 'aria-label': `Remove ${login}`, onclick: () => {
         repo.trusted_users = repo.trusted_users.filter((known) => known !== login);
         changed();
         renderDetail();
       } }, icon('x', 'sm')))))
-    : el('p', { className: 'people-empty', textContent: 'Nobody yet, so no one can start a review here.' });
+    : el('p', { className: 'empty-text', textContent: 'Nobody yet, so no one can start a review here.' });
 
-  const input = el('input', { type: 'text', id: 'people-input', placeholder: 'GitHub username', autocomplete: 'off', spellcheck: false, 'aria-label': 'GitHub username to trust' });
-  const add = el('button', { type: 'submit', className: 'btn', disabled: true }, 'Add');
+  const input = el('input', { type: 'text', id: 'people-input', className: 'field', placeholder: 'GitHub username', autocomplete: 'off', spellcheck: false, 'aria-label': 'GitHub username to trust' });
+  const add = el('button', { type: 'submit', className: 'btn green', disabled: true }, icon('plus', 'sm'), 'Add');
   const hint = el('p', { className: 'hint', textContent: PEOPLE_HINT });
   input.addEventListener('input', () => {
     const login = cleanLogin(input.value);
@@ -271,7 +339,7 @@ function peopleRow(repo) {
     hint.classList.toggle('bad', Boolean(problem));
     hint.textContent = problem || PEOPLE_HINT;
   });
-  const form = el('form', { className: 'inline-form', novalidate: '' }, input, add);
+  const form = el('form', { className: 'add-line', novalidate: '' }, input, add);
   form.addEventListener('submit', (event) => {
     event.preventDefault();
     const login = cleanLogin(input.value);
@@ -282,56 +350,121 @@ function peopleRow(repo) {
     focusId('people-input');
   });
 
-  return row('Trusted people', 'Only their review commands are obeyed in this repository.',
+  return card('Trusted people', 'Only their review commands are obeyed in this repository.', chip('mint', String(repo.trusted_users.length)),
     people, form, hint,
-    el('div', { className: 'note' }, icon('alert'), el('p', { textContent: 'When tests are on, pull requests opened by these people also run the test command on your Mac. Only add people whose code you would run yourself.' })));
+    note('warn', 'alert', 'When tests are on, pull requests opened by these people also run the test command on your Mac. Only add people whose code you would run yourself.'));
 }
 
-function choice(artName, title, description, checked, onPick) {
-  return el('button', { type: 'button', role: 'radio', className: 'choice', 'aria-checked': String(checked), onclick: onPick },
-    checked && el('span', { className: 'pill', textContent: 'In use' }),
-    art(artName),
-    el('span', { className: 'choice-title', textContent: title }),
-    el('span', { className: 'choice-desc', textContent: description }));
+function setEngine(repo, id) {
+  if (repo.engine === id) return;
+  repo.engine = id;
+  repo.model = '';
+  repo.effort = '';
+  customModel.delete(repo);
+  changed();
+  renderDetail();
 }
 
-const MODEL_HINT = 'The name you would pass to codex with -m.';
+function setModel(repo, modelId) {
+  repo.model = modelId;
+  if (repo.effort && !effortsFor(engineOf(repo.engine), repo.model).includes(repo.effort)) repo.effort = '';
+  changed();
+}
 
-function modelRow(repo) {
-  const custom = repo.model !== '' || customModel.has(repo);
-  const pick = (wantCustom) => {
-    if (wantCustom) {
+function effortPill(repo, value, label) {
+  return el('button', {
+    type: 'button',
+    role: 'radio',
+    className: 'pill-option',
+    'aria-checked': String(repo.effort === value),
+    onclick: () => { repo.effort = value; changed(); renderDetail(); },
+  }, label);
+}
+
+function modelField(repo, engine) {
+  const models = engine ? engine.models : [];
+  const known = models.some((model) => model.id === repo.model);
+  const custom = (repo.model !== '' && !known) || customModel.has(repo);
+  const selectBox = el('select', { className: 'select', id: 'model-select', 'aria-label': 'Model' },
+    el('option', { value: '', textContent: engine?.defaultModel ? `CLI default (${engine.defaultModel})` : 'CLI default' }),
+    ...models.map((model) => el('option', { value: model.id, textContent: model.name === model.id ? model.id : `${model.name} (${model.id})` })),
+    el('option', { value: CUSTOM, textContent: 'Other model…' }));
+  selectBox.value = custom ? CUSTOM : repo.model;
+  selectBox.addEventListener('change', () => {
+    if (selectBox.value === CUSTOM) {
       customModel.add(repo);
+      setModel(repo, '');
     } else {
       customModel.delete(repo);
-      repo.model = '';
-      changed();
+      setModel(repo, selectBox.value);
     }
     renderDetail();
-    if (wantCustom) focusId('model-input');
-  };
-  const choices = el('div', { className: 'choices', role: 'radiogroup', 'aria-label': 'Review model' },
-    choice('defaults', 'Codex default', 'Uses the model your Codex CLI is already set up with.', !custom, () => pick(false)),
-    choice('specific', 'Specific model', 'Pick a model for this repository only.', custom, () => pick(true)));
-  if (!custom) return row('Review model', 'Which model reads the code and writes the review.', choices);
-
-  const input = el('input', { type: 'text', id: 'model-input', className: 'mono', value: repo.model, placeholder: 'Model name', list: 'models', autocomplete: 'off', spellcheck: false });
-  const hint = el('p', { className: 'hint', textContent: MODEL_HINT });
-  input.addEventListener('input', () => {
-    const bad = !MODEL_RE.test(input.value.trim());
-    input.classList.toggle('invalid', bad);
-    hint.classList.toggle('bad', bad);
-    hint.textContent = bad ? 'Letters, numbers, dots, dashes, colons or underscores, up to 64.' : MODEL_HINT;
-    repo.model = input.value.trim();
-    changed();
+    if (selectBox.value === CUSTOM) focusId('model-input');
   });
-  return row('Review model', 'Which model reads the code and writes the review.', choices,
-    el('div', { className: 'choice-extra' }, el('label', { className: 'field-label', htmlFor: 'model-input', textContent: 'Model name' }), input, hint));
+  const parts = [el('label', { className: 'label', htmlFor: 'model-select', textContent: 'Model' }), el('span', { className: 'select-wrap' }, selectBox, el('span', { className: 'select-chevron' }, icon('chevron', 'sm')))];
+  if (custom) {
+    const input = el('input', { type: 'text', id: 'model-input', className: 'field mono custom-model', value: repo.model, placeholder: repo.engine === 'claude' ? 'Full model name' : 'Model name', autocomplete: 'off', spellcheck: false, 'aria-label': 'Model name' });
+    const hint = el('p', { className: 'hint', textContent: 'Any model name the CLI accepts.' });
+    input.addEventListener('input', () => {
+      const bad = !MODEL_RE.test(input.value.trim());
+      input.classList.toggle('invalid', bad);
+      hint.classList.toggle('bad', bad);
+      hint.textContent = bad ? 'Letters, numbers, dots, dashes, colons or underscores, up to 64.' : 'Any model name the CLI accepts.';
+      repo.model = input.value.trim();
+      changed();
+      $('#runs-code').textContent = commandPreview(repo);
+    });
+    parts.push(input, hint);
+  }
+  return el('div', {}, ...parts);
 }
 
-function testsRow(repo) {
+function effortField(repo, engine) {
+  const efforts = effortsFor(engine, repo.model);
+  const fallback = defaultEffortFor(engine, repo.model);
+  const values = repo.effort && !efforts.includes(repo.effort) ? [...efforts, repo.effort] : efforts;
+  return el('div', {},
+    el('span', { className: 'label', textContent: 'Effort' }),
+    el('div', { className: 'pills', role: 'radiogroup', 'aria-label': 'Effort' },
+      effortPill(repo, '', fallback ? `Default · ${fallback}` : 'Default'),
+      ...values.map((effort) => effortPill(repo, effort, effort))),
+    el('p', { className: 'hint', textContent: 'Higher effort reads more of the code and takes longer.' }));
+}
+
+function engineCard(repo) {
+  if (!state.engines) return card('Review engine', 'Looking for the CLIs installed on this Mac…', null, el('div', { className: 'skeleton line' }));
+  const engine = engineOf(repo.engine);
+  // Only installed CLIs are offered; a configured one that is missing stays visible with a warning.
+  const installed = state.engines.filter((candidate) => candidate.installed || candidate.id === repo.engine);
+  const known = installed.length ? installed : [{ id: repo.engine, name: engineName(repo.engine), installed: true }];
+  const tabs = el('div', { className: 'segmented wide', role: 'radiogroup', 'aria-label': 'Review CLI' },
+    ...known.map((candidate) => el('button', {
+      type: 'button',
+      role: 'radio',
+      className: 'seg',
+      'aria-checked': String(candidate.id === repo.engine),
+      disabled: !candidate.installed && candidate.id !== repo.engine,
+      title: candidate.installed ? candidate.version : 'Not installed on this Mac',
+      onclick: () => setEngine(repo, candidate.id),
+    }, candidate.name, !candidate.installed && el('span', { className: 'seg-note', textContent: 'not installed' }))));
+
+  const notes = [];
+  if (state.enginesError) notes.push(note('bad', 'alert', `Could not detect the installed CLIs (${state.enginesError}).`));
+  if (engine && !engine.installed) notes.push(note('bad', 'alert', `${engine.name} is not installed on this Mac, so reviews here will fail until you install it or pick another CLI.`));
+  notes.push(repo.engine === 'claude'
+    ? note('info', 'shield', 'Uses your Claude plan. It can only read the pull request\'s files: no shell, no edits, no network.')
+    : note('info', 'shield', 'Runs in Codex\'s read-only sandbox, without network, plugins or MCP servers.'));
+
+  return card('Review engine', 'Which CLI reviews pull requests here, with which model and effort.', engine?.version && chip('gray', engine.version),
+    tabs,
+    el('div', { className: 'engine-grid' }, modelField(repo, engine), effortField(repo, engine)),
+    el('div', { className: 'runs' }, icon('terminal', 'sm'), el('code', { id: 'runs-code', textContent: commandPreview(repo) })),
+    ...notes);
+}
+
+function testsCard(repo) {
   const on = repo.test_cmd !== '' || testsDraft.has(repo);
-  const toggle = switchControl(on, ['Run tests before each review', 'Tests are off'], `Run tests for ${repo.repo}`, (enable) => {
+  const toggle = switchControl(on, ['On', 'Off'], `Run tests for ${repo.repo}`, (enable) => {
     if (enable) {
       testsDraft.add(repo);
       repo.test_cmd = parkedCommands.get(repo) || '';
@@ -344,43 +477,49 @@ function testsRow(repo) {
     renderDetail();
     if (enable) focusId('test-input');
   });
-  const description = 'The reviewer sees the result and comments on test coverage.';
-  if (!on) return row('Tests', description, toggle);
-
-  const input = el('input', { type: 'text', id: 'test-input', className: 'mono', value: repo.test_cmd, placeholder: 'npm ci && npm test', autocomplete: 'off', spellcheck: false });
+  if (!on) return card('Tests', 'Run the test suite before reviewing; the reviewer comments on the result.', toggle);
+  const input = el('input', { type: 'text', id: 'test-input', className: 'field mono', value: repo.test_cmd, placeholder: 'npm ci && npm test', autocomplete: 'off', spellcheck: false, 'aria-label': 'Test command' });
   input.addEventListener('input', () => {
     repo.test_cmd = input.value;
     changed();
   });
-  return row('Tests', description,
-    el('div', { className: 'stack' }, toggle,
-      el('div', {},
-        el('label', { className: 'field-label', htmlFor: 'test-input', textContent: 'Command' }),
-        input,
-        el('p', { className: 'hint', textContent: 'Runs in a throwaway copy of the pull request with a time limit, only when its author is trusted here.' }))));
+  return card('Tests', 'Run the test suite before reviewing; the reviewer comments on the result.', toggle,
+    el('label', { className: 'label', htmlFor: 'test-input', textContent: 'Command' }),
+    input,
+    el('p', { className: 'hint', textContent: 'Runs in a throwaway copy of the pull request with a time limit, only when its author is trusted here.' }));
 }
 
-function removeRow(repo) {
-  return row('Remove', 'The bot stops watching this repository. Reviews already posted stay on GitHub.',
-    el('button', { type: 'button', className: 'btn danger', onclick: () => removeRepo(repo) }, icon('trash', 'sm'), 'Remove repository'));
+function activityCard(repo) {
+  return card('Activity', 'Reviews and bot events for this repository.',
+    el('button', { type: 'button', className: 'btn sm', onclick: () => { state.activityRepo = key(repo.repo); location.hash = 'activity'; } }, 'Open full activity'),
+    el('div', { id: 'repo-activity' }));
+}
+
+function removeCard(repo) {
+  return card('Remove repository', 'The bot stops watching it. Reviews already posted stay on GitHub.',
+    el('button', { type: 'button', className: 'btn danger sm', onclick: () => removeRepo(repo) }, icon('trash', 'sm'), 'Remove'));
 }
 
 function emptyState() {
-  return el('div', { className: 'empty' },
-    art('repo', 'lg'),
-    el('h1', { textContent: 'Watch your first repository' }),
-    el('p', { textContent: 'The bot checks your repositories every two minutes and reviews a pull request when someone you trust asks for it.' }),
-    el('button', { type: 'button', className: 'btn primary', onclick: openAdd }, icon('plus', 'sm'), 'Add repository'));
+  return el('section', { className: 'card' },
+    el('div', { className: 'empty' },
+      el('span', { className: 'empty-mark' }, icon('logo', 'lg')),
+      el('h1', { textContent: 'Watch your first repository' }),
+      el('p', { textContent: 'The bot checks your repositories every two minutes and reviews a pull request when someone you trust asks for it.' }),
+      el('button', { type: 'button', className: 'btn green', onclick: openAdd }, icon('plus', 'sm'), 'Add repository')));
 }
 
 function renderDetail() {
   const detail = $('#detail');
   if (!state.loaded) {
-    detail.replaceChildren(el('div', { className: 'skeleton block' }), el('div', { className: 'skeleton block tall' }));
+    detail.replaceChildren(el('div', { className: 'skeleton block' }), el('div', { className: 'skeleton tall' }));
     return;
   }
   const repo = selectedRepo();
-  detail.replaceChildren(...(repo ? [repoHead(repo), peopleRow(repo), modelRow(repo), testsRow(repo), removeRow(repo)] : [emptyState()]));
+  detail.replaceChildren(...(repo
+    ? [heroCard(repo), engineCard(repo), peopleCard(repo), testsCard(repo), activityCard(repo), removeCard(repo)]
+    : [emptyState()]));
+  renderRepoActivity();
 }
 
 /* ---------- Adding and removing ---------- */
@@ -419,8 +558,10 @@ function addRepo(event) {
   event.preventDefault();
   const name = parseRepo($('#add-repo').value);
   if (state.saving || !name || repoProblem(name)) return;
-  state.repos.push({ repo: name, enabled: true, trusted_users: [], model: '', test_cmd: '' });
+  state.repos.push({ repo: name, enabled: true, trusted_users: [], engine: 'codex', model: '', effort: '', test_cmd: '' });
   $('#add-dialog').close();
+  state.search = '';
+  $('#repo-search').value = '';
   select(name);
   changed();
   focusId('people-input');
@@ -467,10 +608,9 @@ function describeError(message) {
 }
 
 function renderAll() {
-  renderNav();
+  renderList();
   renderDetail();
   renderSavebar();
-  renderModels();
 }
 
 async function save() {
@@ -506,11 +646,14 @@ function discard() {
   toast('Changes discarded');
 }
 
+// Entries saved before engines existed have no engine or effort yet.
+const withDefaults = (repo) => ({ engine: 'codex', effort: '', ...repo });
+
 async function loadRepos() {
   setEditable(false);
   $('#load-error').hidden = true;
   try {
-    const repos = (await api('/api/repos')).repos;
+    const repos = (await api('/api/repos')).repos.map(withDefaults);
     state.repos = repos;
     state.savedRepos = clone(repos);
     state.loaded = true;
@@ -525,11 +668,21 @@ async function loadRepos() {
 /* ---------- Activity ---------- */
 
 function logKind(message) {
-  if (/fail|error|invalid|missing|timed out/i.test(message)) return 'bad';
+  if (/fail|error|invalid|missing|timed out|unknown/i.test(message)) return 'bad';
   if (/^(Reviewed|Learned)\b/.test(message)) return 'good';
   if (/^Dispatch\b/.test(message)) return 'info';
   return '';
 }
+
+function parsedLog() {
+  return state.activity.log.map((line) => {
+    const match = /^(\S+)\s+(.*)$/.exec(line);
+    return match ? { stamp: match[1], text: match[2] } : { stamp: '', text: line };
+  });
+}
+
+// Log lines name the repository as owner/name, often followed by #number.
+const mentions = (line, repoKey) => !repoKey || new RegExp(`(^|[\\s"])${repoKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(#|:|"|\\s|$)`, 'i').test(line.text);
 
 function logTime(stamp) {
   const date = new Date(stamp);
@@ -539,56 +692,97 @@ function logTime(stamp) {
   return { text: today ? time : `${date.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${time}`, title: date.toLocaleString() };
 }
 
-function renderLog() {
-  const filter = $('#log-filter').value.trim().toLowerCase();
+function logLines(lines, emptyText) {
+  if (!lines.length) return [el('p', { className: 'console-empty', textContent: emptyText })];
+  return lines.map((line) => {
+    const time = logTime(line.stamp);
+    return el('div', { className: `log-line ${logKind(line.text)}` },
+      el('time', { className: 'log-time', dateTime: line.stamp, title: time.title, textContent: time.text }),
+      el('span', { className: 'log-msg', textContent: line.text }));
+  });
+}
+
+const prLink = (review) => (REPO_RE.test(review.repo) ? `https://github.com/${review.repo}/pull/${Number(review.pr)}` : null);
+const reviewsOf = (repoKey) => state.activity.reviews.filter((review) => !repoKey || key(review.repo) === repoKey);
+
+function renderRepoActivity() {
+  const holder = $('#repo-activity');
+  const repo = selectedRepo();
+  if (!holder || !repo) return;
+  const repoKey = key(repo.repo);
+  const reviews = reviewsOf(repoKey).slice(0, 5);
+  const list = reviews.length
+    ? el('div', { className: 'mini-list' }, ...reviews.map((review) => el(prLink(review) ? 'a' : 'div', { className: 'mini-item', href: prLink(review) || undefined, target: '_blank', rel: 'noopener noreferrer' },
+      avatar(`#${review.pr}`, 'sm'),
+      el('span', { className: 'mini-main' }, el('span', { className: 'mini-title', textContent: `Pull request #${review.pr}` }), el('span', { className: 'mini-sub', textContent: ago(review.at) })),
+      el('code', { className: 'sha', textContent: String(review.sha).slice(0, 7) }))))
+    : el('p', { className: 'empty-text', textContent: 'No reviews in this repository yet.' });
+  const lines = parsedLog().filter((line) => mentions(line, repoKey)).slice(-12);
+  const events = el('div', { className: 'console short' }, ...logLines(lines, 'Nothing logged for this repository yet.'));
+  holder.replaceChildren(list, el('p', { className: 'subhead', textContent: 'Latest bot events' }), events);
+  events.scrollTop = events.scrollHeight;
+}
+
+function stat(tint, iconName, value, label) {
+  return el('div', { className: 'stat' },
+    el('span', { className: `stat-icon chip-${tint}` }, icon(iconName, 'lg')),
+    el('div', {}, el('div', { className: 'stat-value', textContent: value }), el('div', { className: 'stat-label', textContent: label })));
+}
+
+function renderActivityFilter() {
+  const selectBox = $('#activity-repo');
+  const names = [...new Set([...state.repos.map((repo) => repo.repo), ...state.activity.reviews.map((review) => review.repo)])].sort();
+  selectBox.replaceChildren(el('option', { value: '', textContent: 'All repositories' }), ...names.map((name) => el('option', { value: key(name), textContent: name })));
+  if (state.activityRepo && !names.some((name) => key(name) === state.activityRepo)) state.activityRepo = '';
+  selectBox.value = state.activityRepo;
+}
+
+function renderActivityPage() {
+  renderActivityFilter();
+  const repoKey = state.activityRepo;
+  const reviews = reviewsOf(repoKey);
+  const recent = reviews.filter((review) => Date.now() - new Date(review.at).getTime() < WEEK_MS).length;
+  const allLines = parsedLog().filter((line) => mentions(line, repoKey));
+  const problems = allLines.filter((line) => logKind(line.text) === 'bad').length;
+  const repos = repoKey ? state.repos.filter((repo) => key(repo.repo) === repoKey) : state.repos;
+  const people = new Set(repos.flatMap((repo) => repo.trusted_users.map(key))).size;
+
+  $('#activity-summary').textContent = reviews.length ? `Last review ${ago(reviews[0].at)}` : 'No reviews yet';
+  $('#updated').textContent = state.activityAt ? `Updated ${ago(state.activityAt)}` : '';
+  $('#stats').replaceChildren(
+    stat('mint', 'chat', String(recent), 'Reviews this week'),
+    stat('blue', 'eye', String(repos.filter((repo) => repo.enabled).length), 'Repositories watched'),
+    stat('purple', 'users', String(people), 'Trusted people'),
+    stat(problems ? 'pink' : 'yellow', 'alert', String(problems), 'Problems in the log'));
+
+  if (state.activityError) {
+    $('#reviews').replaceChildren(note('bad', 'alert', state.activityError));
+  } else if (!reviews.length) {
+    $('#reviews').replaceChildren(el('p', { className: 'empty-text', textContent: 'No reviews yet. When someone you trust comments the review command on a pull request, it shows up here.' }));
+  } else {
+    $('#reviews').replaceChildren(el('table', { className: 'table' },
+      el('thead', {}, el('tr', {}, el('th', { textContent: 'Repository' }), el('th', { textContent: 'Pull request' }), el('th', { className: 'hide-sm', textContent: 'Commit' }), el('th', { textContent: 'Reviewed' }))),
+      el('tbody', {}, ...reviews.slice(0, 30).map((review) => {
+        const [owner] = String(review.repo).split('/');
+        const link = prLink(review);
+        return el('tr', {},
+          el('td', {}, el('span', { className: 'repo-cell' }, avatar(owner, 'sm'), review.repo)),
+          el('td', {}, link ? el('a', { href: link, target: '_blank', rel: 'noopener noreferrer' }, chip('mint', `#${review.pr}`)) : chip('gray', `#${review.pr}`)),
+          el('td', { className: 'hide-sm' }, el('code', { className: 'sha', textContent: String(review.sha).slice(0, 7) })),
+          el('td', { className: 'muted', title: new Date(review.at).toLocaleString(), textContent: `${ago(review.at)} · ${shortDate(review.at)}` }));
+      }))));
+  }
+  renderLog(allLines);
+}
+
+function renderLog(lines = parsedLog().filter((line) => mentions(line, state.activityRepo))) {
+  const filter = key($('#log-filter').value.trim());
   const problemsOnly = $('#log-problems').checked;
   const box = $('#log');
   const atEnd = box.scrollTop + box.clientHeight >= box.scrollHeight - 12;
-  const lines = state.activity.log
-    .map((line) => {
-      const match = /^(\S+)\s+(.*)$/.exec(line);
-      return match ? { stamp: match[1], text: match[2] } : { stamp: '', text: line };
-    })
-    .filter((line) => (!filter || line.text.toLowerCase().includes(filter)) && (!problemsOnly || logKind(line.text) === 'bad'));
-  box.replaceChildren(...(lines.length
-    ? lines.map((line) => {
-      const time = logTime(line.stamp);
-      return el('div', { className: `log-line ${logKind(line.text)}` },
-        el('time', { className: 'log-time', dateTime: line.stamp, title: time.title, textContent: time.text }),
-        el('span', { className: 'log-msg', textContent: line.text }));
-    })
-    : [el('p', { className: 'console-empty', textContent: state.activity.log.length ? 'No lines match.' : 'Nothing logged yet.' })]));
+  const shown = lines.filter((line) => (!filter || key(line.text).includes(filter)) && (!problemsOnly || logKind(line.text) === 'bad'));
+  box.replaceChildren(...logLines(shown, state.activity.log.length ? 'No lines match.' : 'Nothing logged yet.'));
   if (atEnd) box.scrollTop = box.scrollHeight;
-}
-
-function renderReviews() {
-  const list = $('#reviews');
-  const reviews = state.activity.reviews.slice(0, 25);
-  if (state.activityError) {
-    list.replaceChildren(el('li', { className: 'list-empty bad' }, state.activityError));
-  } else if (!reviews.length) {
-    list.replaceChildren(el('li', { className: 'list-empty' }, art('chat'), 'No reviews yet. When someone you trust comments the review command on a pull request, it shows up here.'));
-  } else {
-    list.replaceChildren(...reviews.map((review) => {
-      const [owner] = String(review.repo).split('/');
-      const label = `${review.repo} #${review.pr}`;
-      return el('li', { className: 'list-item' },
-        avatar(owner, 'md'),
-        el('div', { className: 'list-main' },
-          REPO_RE.test(review.repo)
-            ? el('a', { className: 'list-title', href: `https://github.com/${review.repo}/pull/${Number(review.pr)}`, target: '_blank', rel: 'noopener noreferrer', textContent: label })
-            : el('span', { className: 'list-title', textContent: label }),
-          el('span', { className: 'list-sub', textContent: ago(review.at) })),
-        el('div', { className: 'list-meta' },
-          el('code', { className: 'sha', textContent: String(review.sha).slice(0, 7) }),
-          el('time', { dateTime: review.at, textContent: new Date(review.at).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) })));
-    }));
-  }
-  const recent = state.activity.reviews.filter((review) => Date.now() - new Date(review.at).getTime() < WEEK_MS).length;
-  $('#activity-summary').textContent = state.activity.reviews.length
-    ? `${recent} ${recent === 1 ? 'review' : 'reviews'} this week · last one ${ago(state.activity.reviews[0].at)}`
-    : 'Reviews and bot events from this Mac.';
-  $('#updated').textContent = state.activityAt ? `Updated ${ago(state.activityAt)}` : '';
 }
 
 async function refreshActivity() {
@@ -601,8 +795,8 @@ async function refreshActivity() {
     state.activityError = `Could not load activity: ${error.message}`;
   } finally {
     $('#refresh').disabled = false;
-    renderReviews();
-    renderLog();
+    renderActivityPage();
+    renderRepoActivity();
   }
 }
 
@@ -610,21 +804,27 @@ async function refreshActivity() {
 
 function showView() {
   const current = view();
+  for (const button of document.querySelectorAll('.seg[data-view]')) button.classList.toggle('active', button.dataset.view === current);
   $('#page-repos').hidden = current !== 'repos';
   $('#page-activity').hidden = current !== 'activity';
-  renderNav();
-  if (current === 'repos') renderDetail();
+  window.scrollTo(0, 0);
+  if (current === 'activity') renderActivityPage();
+  else renderAll();
 }
 
 function start() {
   $('#brand-mark').append(icon('logo'));
-  $('#nav-add').prepend(icon('plus'));
-  $('#nav-activity').prepend(icon('pulse'));
-  $('#nav-footer').prepend(icon('lock', 'sm'));
+  $('#local-note').prepend(icon('lock', 'sm'));
+  $('#nav-add').prepend(icon('plus', 'sm'));
+  $('#search-icon').replaceWith(icon('search'));
+  $('#activity-chevron').append(icon('chevron', 'sm'));
   $('#refresh').prepend(icon('refresh', 'sm'));
-  $('#add-close').append(icon('x'));
+  $('#add-close').append(icon('x', 'sm'));
+  for (const button of document.querySelectorAll('.seg[data-view]')) {
+    button.addEventListener('click', () => { location.hash = button.dataset.view === 'activity' ? 'activity' : 'repositories'; });
+  }
   $('#nav-add').addEventListener('click', openAdd);
-  $('#nav-activity').addEventListener('click', () => { location.hash = 'activity'; });
+  $('#repo-search').addEventListener('input', () => { state.search = $('#repo-search').value.trim(); renderList(); });
   $('#add-repo').addEventListener('input', onAddInput);
   $('#add-form').addEventListener('submit', addRepo);
   $('#add-cancel').addEventListener('click', () => $('#add-dialog').close());
@@ -634,8 +834,9 @@ function start() {
   $('#discard').addEventListener('click', discard);
   $('#retry').addEventListener('click', loadRepos);
   $('#refresh').addEventListener('click', refreshActivity);
-  $('#log-filter').addEventListener('input', renderLog);
-  $('#log-problems').addEventListener('change', renderLog);
+  $('#activity-repo').addEventListener('change', () => { state.activityRepo = $('#activity-repo').value; renderActivityPage(); });
+  $('#log-filter').addEventListener('input', () => renderLog());
+  $('#log-problems').addEventListener('change', () => renderLog());
   window.addEventListener('hashchange', showView);
   document.addEventListener('keydown', (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
@@ -648,8 +849,8 @@ function start() {
     if (added + edited + removed) event.preventDefault();
   });
   showView();
-  renderAll();
   loadRepos();
+  loadEngines();
   refreshActivity();
   setInterval(refreshActivity, REFRESH_MS);
 }
