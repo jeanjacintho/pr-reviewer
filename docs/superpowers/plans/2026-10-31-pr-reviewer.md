@@ -26,7 +26,7 @@
 - Lessons cap: 40. Test log tail in prompt: 200 lines. Poll interval: 120 s. Defaults `REVIEW_TIMEOUT_SECS=1200`, `TEST_TIMEOUT_SECS=900`.
 - `state/`, `work/`, `config.sh` are gitignored.
 - Follow `AGENTS.md` and the `ub-mode` skill. Functions are declared `name() {` at column 0 and closed by `}` at column 0 (the quality tools rely on it).
-- Quality gate before every code commit (delegate to the `quality-gate` agent): `bash tests/run.sh` green, `tools/crapper` (every function CRAP < 10), `tools/dryer` (nothing ranked ≥ 0.8), `tools/mutator --since <task start ref>` (no survivors). Each task's commit step includes it.
+- Quality gate before every code commit: run `tools/gate` (tests green, every function CRAP < 10, nothing ranked ≥ 0.8, no surviving mutants on changed lines); then `tools/review` for an independent review of the task. Each task's commit step includes it.
 - Commits: Conventional Commits in English; body says why, what changed and how it was verified.
 
 ## Review Focus

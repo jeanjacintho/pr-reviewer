@@ -35,17 +35,30 @@ touch code.
 
 ## Quality gate
 
-Run before every commit that changes code. Delegate to the `quality-gate`
-agent to keep the main context small.
+Run `tools/gate` before every commit that changes code. It runs the tests,
+then crapper, dryer and mutator, and prints a short summary (`Gate: PASS` or
+`FAIL` plus the offending items). Exit status 1 means FAIL.
 
-| Tool | Command | Passes when |
-|---|---|---|
-| crapper | `tools/crapper` | every function has CRAP below 10 |
-| dryer | `tools/dryer` | no duplicated region ranks 0.8 or above |
-| mutator | `tools/mutator --since HEAD` (full run: no `--since`) | no surviving mutants |
+| Tool | Passes when |
+|---|---|
+| `tools/crapper` | every function has CRAP below 10 |
+| `tools/dryer` | no duplicated region ranks 0.8 or above |
+| `tools/mutator --since HEAD` | no surviving mutants on the changed lines |
 
-All three take `--help`. They analyze the project's Bash and jq code
-outside `tests/` and `tools/`.
+`tools/gate --since <ref>` changes the mutation base; `tools/gate --full`
+mutates everything. All tools take `--help`. They analyze the project's Bash
+and jq code outside `tests/` and `tools/`.
+
+## Review
+
+After a plan task is implemented, and before committing it, get an
+independent review with `tools/review` (`--engine codex|claude`, default
+codex or `REVIEW_ENGINE`; `--range REF..REF`, free text adds a focus). Prefer
+the engine that did not write the change. The reviewer prompt is
+`tools/prompts/reviewer.md`, read-only, and shared by both engines.
+
+Claude Code also exposes `quality-gate` and `reviewer` agents in
+`.claude/agents/`; they only wrap the two commands above.
 
 ## Commits
 
