@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 const { validateRepos } = require('./validate');
+const { listEngines } = require('./engines');
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
@@ -12,6 +13,7 @@ const PAGE_HEADERS = {
 };
 const MAX_BODY = 64 * 1024;
 const LOG_LINES = 200;
+const ENGINES_TTL_MS = 30000;
 
 class HttpError extends Error {
   constructor(status, message, extra) {
@@ -125,7 +127,20 @@ function sendPage(res, pathname) {
   res.end(content);
 }
 
-function createServer({ root }) {
+// Detecting CLIs runs `--version`, so keep the answer for a little while.
+function cached(load, ttl) {
+  let value;
+  let at = 0;
+  return () => {
+    if (!value || Date.now() - at > ttl) {
+      value = load();
+      at = Date.now();
+    }
+    return value;
+  };
+}
+
+function createServer({ root, engines = cached(() => listEngines(), ENGINES_TTL_MS) }) {
   const reposFile = path.join(root, 'repos.json');
   const routes = {
     '/api/repos': {
@@ -133,6 +148,7 @@ function createServer({ root }) {
       PUT: (req) => putRepos(req, reposFile),
     },
     '/api/activity': { GET: () => ({ reviews: reviews(root), log: logTail(root) }) },
+    '/api/engines': { GET: () => ({ engines: engines() }) },
   };
 
   // A page open in the browser can reach 127.0.0.1; only our own origin may act.

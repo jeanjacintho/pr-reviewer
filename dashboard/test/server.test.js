@@ -12,7 +12,8 @@ const VALID = { repos: [{ repo: 'o/a', enabled: true, trusted_users: ['alice'], 
 async function withServer(fn) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-'));
   fs.mkdirSync(path.join(root, 'state'));
-  const server = createServer({ root });
+  const engines = () => [{ id: 'codex', installed: true }];
+  const server = createServer({ root, engines });
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const port = server.address().port;
   try {
@@ -163,4 +164,11 @@ test('static files cannot escape the public folder', () =>
 test('the page is also refused to foreign hosts', () =>
   withServer(async ({ port }) => {
     assert.equal((await request(port, { url: '/', headers: { Host: 'evil.example' } })).status, 403);
+  }));
+
+test('GET /api/engines returns what the machine has', () =>
+  withServer(async ({ port }) => {
+    const res = await request(port, { url: '/api/engines' });
+    assert.deepEqual([res.status, res.body], [200, { engines: [{ id: 'codex', installed: true }] }]);
+    assert.equal((await request(port, { method: 'PUT', url: '/api/engines' })).status, 405);
   }));
