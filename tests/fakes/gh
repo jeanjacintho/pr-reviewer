@@ -1,0 +1,17 @@
+#!/bin/bash
+set -euo pipefail
+printf 'gh %s\n' "$*" >> "$FAKE_LOG"
+case "$*" in
+    *'repository('*|*'repository(owner:'*) cat "$FAKE_GH_PRS" ;;
+    'pr view '*) cat "$FAKE_GH_META" ;;
+    'pr comment '*)
+        while [ "$1" != --body-file ]; do shift; done
+        cat "$2" >> "$FAKE_POSTS"
+        printf '\n===COMMENT===\n' >> "$FAKE_POSTS" ;;
+    *'node(id:'*) jq -n --arg body "${FAKE_GH_BODY:-}" '{data:{node:{body:$body}}}' ;;
+    *'/comments'*) cat "${FAKE_GH_COMMENTS:-/dev/null}" ;;
+    'api user --jq .login') printf '%s\n' "${FAKE_GH_LOGIN:-alice}" ;;
+    'auth status') : ;;
+    *) printf '{}\n' ;;
+esac
+exit "${FAKE_GH_EXIT:-0}"
