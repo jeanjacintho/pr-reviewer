@@ -38,6 +38,7 @@ review_setup() {
     printf 'TRUSTED_USERS=(alice)\nTEST_CMDS=()\n' > "$PR_REVIEWER_CONFIG"
     export PATH="$source_root/tests/fakes:$PATH"
     export FAKE_LOG="$ROOT/fake.log" FAKE_POSTS="$ROOT/posts" FAKE_CODEX_OUT="$ROOT/output" FAKE_GH_META="$ROOT/meta" FAKE_GH_COMMENTS="$ROOT/comments"
+    export FAKE_CODEX_MCP_LIST='[{"name":"local"}]'
     printf '[]' > "$FAKE_GH_COMMENTS"
     printf 'A valid review\nVERDICT: APPROVE\n' > "$FAKE_CODEX_OUT"
     : > "$FAKE_LOG"

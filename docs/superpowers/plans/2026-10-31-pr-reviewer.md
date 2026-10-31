@@ -88,7 +88,7 @@ Already on `main`: `AGENTS.md`/`CLAUDE.md`, the `ub-mode` skill, the `quality-ga
   - `log msg...` → appends `<ISO8601> msg` to `$STATE_DIR/poll.log`; rotates to `poll.log.1` above 1 MB.
   - `is_trusted login` → exit 0 if `login` is in `TRUSTED_USERS` (case-insensitive).
   - `test_cmd_for repo` → prints the command after `repo|` in `TEST_CMDS`, empty if none.
-  - `run_with_timeout secs cmd...` → runs via `perl -e 'alarm shift; exec @ARGV'`; returns 124 on timeout (map perl's 142), else the command's status.
+  - `run_with_timeout secs cmd...` → supervises a process group with a Perl alarm, terminates descendants on timeout or cancellation, and returns 124 on timeout; otherwise preserves the command status.
 
 - [ ] **Step 1: Write failing tests** in `tests/test_common.sh`:
   - `test_is_trusted`: with `TRUSTED_USERS=(jeanjacintho alice)`, `is_trusted Alice` → 0, `is_trusted bob` → 1.
@@ -219,7 +219,7 @@ Already on `main`: `AGENTS.md`/`CLAUDE.md`, the `ub-mode` skill, the `quality-ga
 - `review.sh <full|update> <repo> <pr> <comment_node_id>` flow:
   1. `react id EYES`; `trap` cleans worktrees and temp dir on exit.
   2. `pr_meta`; prepare the review worktree (fetch first, so `sha_exists` sees history).
-  3. Requested `full`→`review`, `update`→`update-review`; `resolve_mode` with `reviewed_get`, head sha, `sha_exists`. `noop` → post `No new commits since last review (<short sha>).` + marker, swap EYES→THUMBS_UP, exit 0. `fallback` → treat as `full` with `FALLBACK_NOTE="No usable previous review — doing a full review."`.
+  3. Requested `full`→`review`, `update`→`update-review`; `resolve_mode` with `reviewed_get`, head sha, `sha_exists` plus an ancestry check. `noop` → post `No new commits since last review.` + marker, swap EYES→THUMBS_UP, exit 0. `fallback` → treat as `full` with `FALLBACK_NOTE="No usable previous review — doing a full review."`.
   4. `test_decision`: `run` → second worktree `tests`, run `run_with_timeout $TEST_TIMEOUT_SECS bash -c "$cmd"` inside it in the background, capturing to a log; write `TEST_RESULT_FILE` = `exit <code>` (or `timed out after Ns`) + last 200 log lines; wait before codex. `skip-untrusted` → `Tests skipped: PR author is not in the trusted list.` `not-configured` → `Tests not configured for this repo.`
   5. Diffs: full = `git diff <merge-base origin/base, head>`; update = `git diff <last_sha> <head>` plus full diff as context.
   6. `build_review_prompt`; `run_with_timeout $REVIEW_TIMEOUT_SECS codex exec --sandbox read-only -C <wt> --output-last-message <out> [-m model] - < prompt`.

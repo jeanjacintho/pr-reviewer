@@ -2,6 +2,7 @@
 set -euo pipefail
 printf 'codex %s\n' "$*" >> "$FAKE_LOG"
 if [ "${1:-}" = --version ]; then echo 'codex fixture'; exit 0; fi
+case "$*" in *'mcp list --json') printf '%s\n' "${FAKE_CODEX_MCP_LIST:-[]}"; exit 0 ;; esac
 cat > "$FAKE_LOG.stdin"
 if [ -n "${FAKE_CODEX_SLEEP:-}" ]; then sleep "$FAKE_CODEX_SLEEP"; fi
 while [ "$1" != --output-last-message ]; do shift; done
