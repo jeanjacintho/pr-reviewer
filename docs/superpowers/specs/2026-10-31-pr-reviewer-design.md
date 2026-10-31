@@ -217,6 +217,18 @@ Uma página web **só no Mac do Jean** para configurar o bot sem editar arquivos
 - Roda como segundo serviço launchd (`com.jeanjacintho.pr-reviewer-dashboard`), a partir da instalação fora de Documents.
 - Se o dashboard cair, o bot continua: o Bash só lê `repos.json`.
 
+## Motor de revisão por repositório (adendo de 2026-10-31, aprovado pelo Jean)
+
+Substitui "uma chamada Codex por revisão" por "uma chamada ao motor escolhido para o repositório". Continua **uma** chamada por revisão, sem pipeline.
+
+- `repos.json` ganha `engine` (`codex` ou `claude`; ausente = `codex`) e `effort` (vazio = padrão da CLI). `model` vazio continua sendo o padrão da CLI.
+- **Codex:** como antes, mais `-c model_reasoning_effort="<effort>"` quando `effort` não está vazio. O nível `ultra` (delegação automática) não é oferecido, porque multi-agente fica desligado por segurança.
+- **Claude Code:** `claude -p --restricted --tools "Read,Grep,Glob" --permission-mode dontAsk --strict-mcp-config --disable-slash-commands --no-session-persistence --output-format text`, prompt via stdin, rodando dentro do worktree, com `--model`/`--effort` quando definidos. `--restricted` tira shell, código e rede, ignora configurações de usuário/projeto e confina a leitura ao diretório. No `memorize`, sem ferramentas (`--tools ""`). Verificado à mão em 2026-10-31: não cria arquivo, não roda shell, não lê fora da pasta, não acessa a rede.
+- Motor desconhecido ou não instalado: a revisão falha com o comentário de erro de sempre; nunca cai para outro motor sem avisar.
+- O dashboard lista só as CLIs instaladas (no PATH do serviço). Modelos e níveis do Codex vêm de `~/.codex/models_cache.json` (só `visibility: "list"`), e o padrão de `~/.codex/config.toml`. Do Claude Code: apelidos `fable`, `opus`, `sonnet` e níveis `low`…`max`; aceita também um nome de modelo digitado.
+- Revisões com Claude Code gastam o plano do Claude do Jean; Codex continua o padrão.
+- Activity também por repositório: a página de cada repo mostra as revisões e as linhas de log daquele repo; a página geral tem filtro por repo.
+
 ## Decisões minhas (o Jean pode mudar)
 
 - **Bash + `gh` + `jq` + `codex exec`**. Sem Node/Python no bot. Exceção única: o dashboard local usa Node sem dependências.
