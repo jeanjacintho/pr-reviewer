@@ -1,0 +1,11 @@
+{
+  "repos": [
+    {
+      "repo": "jeanjacintho/motes",
+      "enabled": true,
+      "trusted_users": ["jeanjacintho"],
+      "model": "",
+      "test_cmd": "npm ci && npm test"
+    }
+  ]
+}

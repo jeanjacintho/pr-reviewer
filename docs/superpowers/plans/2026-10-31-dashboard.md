@@ -39,7 +39,7 @@
 - `repo_trusted_users repo` → prints logins, one per line.
 - `repo_model repo` → repo model, else `$CODEX_MODEL`.
 - `repo_test_cmd repo` → command or empty.
-- `is_trusted repo login` → 0 if login in that repo's list (case-insensitive).
+- `repo_is_trusted repo login` (replaces the global `is_trusted` in Task 2) → 0 if login in that repo's list (case-insensitive).
 
 - [ ] Failing tests: per-repo trust isolation (A vs B), disabled repo omitted, invalid repo name skipped, missing file yields nothing, model fallback to `CODEX_MODEL`.
 - [ ] Implement with `jq`; commit `feat(config): read per-repo settings from repos.json`.
