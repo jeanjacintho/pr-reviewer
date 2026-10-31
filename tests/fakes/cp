@@ -1,0 +1,6 @@
+#!/bin/bash
+set -euo pipefail
+if [ -n "${FAKE_CP_FAIL_DEST_MATCH:-}" ]; then
+    case "${!#}" in *"$FAKE_CP_FAIL_DEST_MATCH"*) exit 1 ;; esac
+fi
+exec /bin/cp "$@"
