@@ -2,6 +2,7 @@ def repo_re: "^[A-Za-z0-9-]+/[A-Za-z0-9_.-]+\\z";
 def repo_name_ok: test(repo_re) and (split("/")[1] | IN(".", "..") | not);
 def login_re: "^[A-Za-z0-9-]{1,39}\\z";
 def model_re: "^[A-Za-z0-9._:-]{0,64}\\z";
+def effort_re: "^[a-z]{0,16}\\z";
 
 def entries:
   .repos[]?
@@ -15,5 +16,10 @@ def trusted_logins($repo):
   [of($repo) | .trusted_users | arrays | .[] | strings | select(test(login_re)) | ascii_downcase];
 
 def model_of($repo): [of($repo) | .model? | strings | select(test(model_re))][0] // "";
+
+# A missing engine means Codex; an unknown one yields "" so the review fails visibly.
+def engine_of($repo): [of($repo) | (.engine // "codex") | select(type == "string" and IN("codex", "claude"))][0] // "";
+
+def effort_of($repo): [of($repo) | .effort? | strings | select(test(effort_re))][0] // "";
 
 def test_cmd_of($repo): [of($repo) | .test_cmd? | strings][0] // "";

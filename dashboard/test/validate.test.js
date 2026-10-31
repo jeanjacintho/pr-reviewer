@@ -10,7 +10,7 @@ test('fills defaults and keeps only known fields', () => {
   const result = check([entry({ junk: 1 })]);
   assert.deepEqual(result, {
     ok: true,
-    value: { repos: [{ repo: 'o/a', enabled: true, trusted_users: [], model: '', test_cmd: '' }] },
+    value: { repos: [{ repo: 'o/a', enabled: true, trusted_users: [], engine: 'codex', model: '', effort: '', test_cmd: '' }] },
   });
 });
 
@@ -41,8 +41,19 @@ test('rejects bad logins, models and types', () => {
     { test_cmd: 'x'.repeat(2001) },
     { test_cmd: 'a\0b' },
     { enabled: 'yes' },
+    { engine: 'other-cli' },
+    { engine: 5 },
+    { effort: 'High' },
+    { effort: 'high; rm' },
+    { effort: 'x'.repeat(17) },
   ];
   for (const extra of bad) assert.equal(check([entry(extra)]).ok, false, JSON.stringify(extra));
+});
+
+test('keeps a chosen engine and effort', () => {
+  const result = check([entry({ engine: 'claude', model: 'opus', effort: 'high' })]);
+  assert.equal(result.ok, true);
+  assert.deepEqual([result.value.repos[0].engine, result.value.repos[0].model, result.value.repos[0].effort], ['claude', 'opus', 'high']);
 });
 
 test('rejects duplicate repos ignoring case and non-array input', () => {

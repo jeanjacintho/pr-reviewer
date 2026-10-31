@@ -3,6 +3,8 @@
 const REPO_RE = /^[A-Za-z0-9-]+\/[A-Za-z0-9_.-]+$/;
 const LOGIN_RE = /^[A-Za-z0-9-]{1,39}$/;
 const MODEL_RE = /^[A-Za-z0-9._:-]{0,64}$/;
+const EFFORT_RE = /^[a-z]{0,16}$/;
+const ENGINES = ['codex', 'claude'];
 const MAX_TEST_CMD = 2000;
 
 function checkRepo(value, at, errors) {
@@ -40,14 +42,17 @@ function checkEntry(entry, at, errors) {
     errors.push(`${at} must be an object`);
     return null;
   }
-  const { enabled = true, trusted_users = [], model = '', test_cmd = '' } = entry;
+  const { enabled = true, trusted_users = [], engine = 'codex', model = '', effort = '', test_cmd = '' } = entry;
   checkRepo(entry.repo, at, errors);
   if (typeof enabled !== 'boolean') errors.push(`${at}.enabled must be true or false`);
+  if (!ENGINES.includes(engine)) errors.push(`${at}.engine must be one of ${ENGINES.join(', ')}`);
   return {
     repo: entry.repo,
     enabled,
     trusted_users: checkLogins(trusted_users, at, errors),
+    engine,
     model: checkText(model, at, errors, { name: 'model', pattern: MODEL_RE }),
+    effort: checkText(effort, at, errors, { name: 'effort', pattern: EFFORT_RE }),
     test_cmd: checkText(test_cmd, at, errors, { name: 'test_cmd', max: MAX_TEST_CMD }),
   };
 }
@@ -69,4 +74,4 @@ function validateRepos(input) {
   return errors.length ? { ok: false, errors } : { ok: true, value: { repos } };
 }
 
-module.exports = { validateRepos };
+module.exports = { validateRepos, ENGINES };

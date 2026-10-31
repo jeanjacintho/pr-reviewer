@@ -30,6 +30,14 @@ repo_model() {
     printf '%s\n' "${model:-$CODEX_MODEL}"
 }
 
+repo_engine() {
+    repos_query 'engine_of($r)' --arg r "$1"
+}
+
+repo_effort() {
+    repos_query 'effort_of($r)' --arg r "$1"
+}
+
 repo_test_cmd() {
     repos_query 'test_cmd_of($r)' --arg r "$1"
 }

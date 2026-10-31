@@ -4,7 +4,9 @@
       "repo": "jeanjacintho/motes",
       "enabled": true,
       "trusted_users": ["jeanjacintho"],
+      "engine": "codex",
       "model": "",
+      "effort": "",
       "test_cmd": "npm ci && npm test"
     }
   ]

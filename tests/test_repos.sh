@@ -98,3 +98,19 @@ test_repos_bad_json_is_logged_not_fatal() {
     if repo_is_trusted o/a alice; then fail 'bad json trusts nobody'; fi
     assert_contains "$(cat "$STATE_DIR/poll.log")" 'Invalid repos file'
 }
+
+test_repos_engine_defaults_to_codex_and_rejects_unknown() {
+    repos_setup '{"repos":[{"repo":"o/a"},{"repo":"o/b","engine":"claude"},{"repo":"o/c","engine":"other-cli"},{"repo":"o/d","engine":5}]}'
+    assert_eq codex "$(repo_engine o/a)"
+    assert_eq claude "$(repo_engine O/B)"
+    assert_eq '' "$(repo_engine o/c)"
+    assert_eq '' "$(repo_engine o/d)"
+}
+
+test_repos_effort_is_a_plain_word() {
+    repos_setup '{"repos":[{"repo":"o/a","effort":"high"},{"repo":"o/b"},{"repo":"o/c","effort":"high; rm -rf"},{"repo":"o/d","effort":"low\n"}]}'
+    assert_eq high "$(repo_effort o/a)"
+    assert_eq '' "$(repo_effort o/b)"
+    assert_eq '' "$(repo_effort o/c)"
+    assert_eq '' "$(repo_effort o/d)"
+}
