@@ -1,0 +1,63 @@
+#!/bin/bash
+# review: runs the reviewer prompt (tools/prompts/reviewer.md) through
+# codex or claude, read-only, and prints the verdict.
+set -euo pipefail
+
+HERE="$(cd "$(dirname "$0")" && pwd)"
+ROOT="${REVIEW_ROOT:-$(cd "$HERE/.." && pwd)}"
+USAGE='usage: tools/review [--engine codex|claude] [--model MODEL] [--range REF..REF] [FOCUS...]
+  Reviews the diff against the spec, plan and AGENTS.md without editing files.
+  --engine  codex (default) or claude; REVIEW_ENGINE sets the default
+  --range   git range to review (default: the working tree against HEAD)
+  FOCUS     free text added to the prompt'
+
+CLAUDE_TOOLS='Read,Grep,Glob,Bash(git diff:*),Bash(git log:*),Bash(git show:*),Bash(git status:*)'
+
+die() {
+    echo "review: $1" >&2
+    exit 2
+}
+
+build_prompt() {
+    cat "$HERE/prompts/reviewer.md"
+    echo
+    echo "Review this change: run \`git diff $1\`."
+    [ -z "$2" ] || echo "Focus: $2"
+}
+
+run_codex() {
+    local out
+    out="$(mktemp)"
+    codex exec --sandbox read-only -C "$ROOT" --output-last-message "$out" ${1:+-m "$1"} - < "$2" >/dev/null
+    cat "$out"
+    rm -f "$out"
+}
+
+run_claude() {
+    (cd "$ROOT" && claude -p --allowedTools "$CLAUDE_TOOLS" ${1:+--model "$1"} < "$2")
+}
+
+main() {
+    local engine="${REVIEW_ENGINE:-codex}" model="" range="HEAD" focus=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --engine) engine="$2"; shift 2 ;;
+            --model) model="$2"; shift 2 ;;
+            --range) range="$2"; shift 2 ;;
+            --help) echo "$USAGE"; exit 0 ;;
+            *) focus="${focus:+$focus }$1"; shift ;;
+        esac
+    done
+    case "$engine" in
+        codex|claude) ;;
+        *) die "unknown engine: $engine (use codex or claude)" ;;
+    esac
+    command -v "$engine" >/dev/null || die "$engine not found on PATH"
+    local prompt
+    prompt="$(mktemp)"
+    build_prompt "$range" "$focus" > "$prompt"
+    "run_$engine" "$model" "$prompt"
+    rm -f "$prompt"
+}
+
+main "$@"
