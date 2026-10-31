@@ -8,89 +8,95 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <header class="topbar">
-    <div class="topbar-inner">
+  <div class="app">
+    <aside class="nav" aria-label="Navigation">
       <div class="brand">
         <span class="brand-mark" id="brand-mark"></span>
-        <div>
-          <div class="brand-name">PR Reviewer</div>
-          <div class="brand-sub">Your personal review bot</div>
-        </div>
+        <span class="brand-name">PR Reviewer</span>
       </div>
-      <nav class="tabs" role="tablist" aria-label="Sections">
-        <button class="tab" type="button" role="tab" data-tab="repos" aria-controls="view-repos">Repositories</button>
-        <button class="tab" type="button" role="tab" data-tab="activity" aria-controls="view-activity">Activity</button>
-      </nav>
-      <span class="local-pill" id="local-pill" title="This page only answers on 127.0.0.1">Only on this Mac</span>
-    </div>
-  </header>
-
-  <main>
-    <div id="load-error" class="banner" role="alert" hidden>
-      <span id="load-error-text"></span>
-      <button id="retry" class="btn" type="button">Try again</button>
-    </div>
-
-    <section id="view-repos" class="view" role="tabpanel" aria-label="Repositories">
-      <div class="stats" id="stats"></div>
-      <fieldset id="editor" class="editor" disabled>
-        <legend class="sr-only">Repository settings</legend>
-        <div class="workspace">
-          <aside class="sidebar" aria-label="Repository list">
-            <div class="sidebar-head">
-              <h2>Repositories</h2>
-              <span class="count" id="repo-count"></span>
-            </div>
-            <div id="repo-list" class="repo-list"></div>
-            <form id="add-form" class="add-form" novalidate>
-              <label for="add-repo">Add a repository</label>
-              <div class="add-row">
-                <input id="add-repo" type="text" placeholder="owner/name or GitHub URL" autocomplete="off" spellcheck="false">
-                <button id="add-button" class="btn primary icon-only" type="submit" aria-label="Add repository" disabled></button>
-              </div>
-              <p id="add-hint" class="field-hint">Paste a link or type <code>owner/name</code>.</p>
-            </form>
-          </aside>
-          <div id="detail" class="detail"></div>
-        </div>
+      <fieldset class="bare lockable" disabled>
+        <legend class="sr-only">Add</legend>
+        <button id="nav-add" class="nav-item" type="button">Add repository</button>
       </fieldset>
-    </section>
+      <button id="nav-activity" class="nav-item" type="button">Activity</button>
+      <div class="nav-label"><span>Repositories</span><span id="repo-count"></span></div>
+      <fieldset class="bare lockable nav-list" disabled>
+        <legend class="sr-only">Repository list</legend>
+        <div id="repo-list"></div>
+      </fieldset>
+      <div class="nav-footer" id="nav-footer" title="This page only answers on 127.0.0.1">Only on this Mac</div>
+    </aside>
 
-    <section id="view-activity" class="view" role="tabpanel" aria-label="Activity" hidden>
-      <div class="activity-grid">
-        <div class="panel">
-          <div class="panel-head">
-            <h2>Recent reviews</h2>
-            <div class="panel-tools">
-              <span id="updated" class="muted small"></span>
-              <button id="refresh" class="btn ghost sm" type="button">Refresh</button>
-            </div>
+    <main class="content">
+      <div id="load-error" class="banner" role="alert" hidden>
+        <span id="load-error-text"></span>
+        <button id="retry" class="btn" type="button">Try again</button>
+      </div>
+
+      <fieldset id="page-repos" class="bare lockable page" disabled>
+        <legend class="sr-only">Repository settings</legend>
+        <div id="detail"></div>
+      </fieldset>
+
+      <section id="page-activity" class="page" hidden>
+        <header class="page-head">
+          <div>
+            <p class="eyebrow">Overview</p>
+            <h1>Activity</h1>
+            <p id="activity-summary" class="lede"></p>
           </div>
-          <ol id="reviews" class="timeline"></ol>
-        </div>
-        <div class="panel">
-          <div class="panel-head">
-            <h2>Bot log</h2>
-            <div class="panel-tools">
+          <div class="head-side">
+            <button id="refresh" class="btn" type="button">Refresh</button>
+            <p id="updated" class="hint"></p>
+          </div>
+        </header>
+        <section class="block">
+          <h2 class="block-title">Recent reviews</h2>
+          <ol id="reviews" class="list"></ol>
+        </section>
+        <section class="block">
+          <div class="block-head">
+            <h2 class="block-title">Bot log</h2>
+            <div class="tools">
               <input id="log-filter" class="search" type="search" placeholder="Filter" aria-label="Filter log lines">
               <label class="check"><input id="log-problems" type="checkbox"> Problems only</label>
             </div>
           </div>
           <div id="log" class="console" tabindex="0" aria-label="Bot log"></div>
-        </div>
-      </div>
-    </section>
-  </main>
+        </section>
+      </section>
+    </main>
+  </div>
 
   <div id="savebar" class="savebar" hidden>
     <ul id="errors" class="savebar-errors" hidden></ul>
     <div class="savebar-row">
       <span class="savebar-dot"></span>
       <span id="savebar-text" class="savebar-text"></span>
-      <button id="discard" class="btn ghost" type="button">Discard</button>
-      <button id="save" class="btn primary" type="button">Save changes <kbd>⌘S</kbd></button>
+      <button id="discard" class="btn quiet" type="button">Discard</button>
+      <button id="save" class="btn primary" type="button">Save changes</button>
     </div>
   </div>
+
+  <dialog id="add-dialog" class="dialog" aria-labelledby="add-title">
+    <form id="add-form" novalidate>
+      <fieldset class="bare lockable">
+      <legend class="sr-only">New repository</legend>
+      <div class="dialog-head">
+        <h2 id="add-title">Add a repository</h2>
+        <button id="add-close" class="icon-btn" type="button" aria-label="Close"></button>
+      </div>
+      <p class="dialog-desc">The bot will watch it for review commands from the people you trust there. A GitHub link works too.</p>
+      <label class="sr-only" for="add-repo">Repository</label>
+      <input id="add-repo" type="text" placeholder="owner/name" autocomplete="off" spellcheck="false">
+      <p id="add-hint" class="hint">For example octocat/hello-world</p>
+      <div class="dialog-actions">
+        <button id="add-cancel" class="btn" type="button">Cancel</button>
+        <button id="add-button" class="btn primary" type="submit" disabled>Add repository</button>
+      </div>
+      </fieldset>
+    </form>
+  </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <datalist id="models"></datalist>
