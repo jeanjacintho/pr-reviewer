@@ -12,10 +12,10 @@ resolve_mode() {
 
 test_decision() {
     local cmd
-    cmd="$(test_cmd_for "$1")"
+    cmd="$(repo_test_cmd "$1")"
     if [ -z "$cmd" ]; then
         echo not-configured
-    elif is_trusted "$2"; then
+    elif repo_is_trusted "$1" "$2"; then
         printf 'run\t%s\n' "$cmd"
     else
         echo skip-untrusted

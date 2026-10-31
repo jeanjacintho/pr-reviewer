@@ -64,13 +64,13 @@ test_review_codex_failures() {
 
 test_review_test_author_gate() {
     review_setup
-    printf '\nTEST_CMDS=("o/r|echo hi; exit 3")\n' >> "$PR_REVIEWER_CONFIG"
+    repos_set test_cmd 'echo hi; exit 3'
     bash "$REVIEW_SCRIPT" full o/r 7 command || fail trusted
     assert_contains "$(cat "$FAKE_LOG.stdin")" 'exit 3'
     assert_contains "$(cat "$FAKE_LOG.stdin")" hi
     jq '.author.login="mallory"' "$FAKE_GH_META" > "$ROOT/meta.next"
     mv "$ROOT/meta.next" "$FAKE_GH_META"
-    printf '\nTEST_CMDS=("o/r|touch %s/should-not-exist")\n' "$ROOT" >> "$PR_REVIEWER_CONFIG"
+    repos_set test_cmd "touch $ROOT/should-not-exist"
     bash "$REVIEW_SCRIPT" full o/r 7 command || fail untrusted
     [ ! -e "$ROOT/should-not-exist" ] || fail executed
     assert_contains "$(cat "$FAKE_LOG.stdin")" 'Tests skipped: PR author is not in the trusted list.'
@@ -79,7 +79,7 @@ test_review_test_author_gate() {
 
 test_review_codex_isolation_and_model_override() {
     review_setup
-    printf '\nCODEX_MODEL=fake-model\n' >> "$PR_REVIEWER_CONFIG"
+    repos_set model fake-model
     export FAKE_CODEX_MCP_LIST='[{"name":"dangerous.server","enabled":true},{"name":"other","enabled":true}]'
     bash "$REVIEW_SCRIPT" full o/r 7 command || fail isolated_review
     local calls="$(cat "$FAKE_LOG")"
@@ -99,6 +99,22 @@ test_review_codex_isolation_and_model_override() {
     assert_not_contains "$calls" '--skip-git-repo-check'
 }
 
+test_review_repo_model_beats_global_default() {
+    review_setup
+    printf '\nCODEX_MODEL=global-model\n' >> "$PR_REVIEWER_CONFIG"
+    repos_set model repo-model
+    bash "$REVIEW_SCRIPT" full o/r 7 command || fail review
+    assert_contains "$(cat "$FAKE_LOG")" '-m repo-model'
+    assert_not_contains "$(cat "$FAKE_LOG")" 'global-model'
+}
+
+test_review_global_model_is_the_default() {
+    review_setup
+    printf '\nCODEX_MODEL=global-model\n' >> "$PR_REVIEWER_CONFIG"
+    bash "$REVIEW_SCRIPT" full o/r 7 command || fail review
+    assert_contains "$(cat "$FAKE_LOG")" '-m global-model'
+}
+
 test_review_github_failure_does_not_publish_twice() {
     review_setup
     FAKE_GH_FAIL_MATCH='pr view' bash "$REVIEW_SCRIPT" full o/r 7 command && fail metadata_failure
@@ -113,7 +129,7 @@ test_review_github_failure_does_not_publish_twice() {
 
 test_review_waits_for_tests_before_error_cleanup() {
     review_setup
-    printf '\nTEST_CMDS=("o/r|sleep 1; touch %s/test-completed")\n' "$ROOT" >> "$PR_REVIEWER_CONFIG"
+    repos_set test_cmd "sleep 1; touch $ROOT/test-completed"
     FAKE_GH_FAIL_MATCH='/comments' bash "$REVIEW_SCRIPT" full o/r 7 command && fail context_failure
     [ -e "$ROOT/test-completed" ] || fail pending_tests
     assert_eq '' "$(ls -A "$WORK_DIR/wt")"

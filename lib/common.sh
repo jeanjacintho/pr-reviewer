@@ -19,23 +19,6 @@ log() {
     printf '%s %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*" >> "$STATE_DIR/poll.log"
 }
 
-is_trusted() {
-    local user
-    for user in ${TRUSTED_USERS[@]+"${TRUSTED_USERS[@]}"}; do
-        if [ "$(printf '%s' "$user" | tr '[:upper:]' '[:lower:]')" = "$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" ]; then
-            return 0
-        fi
-    done
-    return 1
-}
-
-test_cmd_for() {
-    local entry
-    for entry in ${TEST_CMDS[@]+"${TEST_CMDS[@]}"}; do
-        case "$entry" in "$1|"*) printf '%s\n' "${entry#*|}"; return ;; esac
-    done
-}
-
 run_with_timeout() {
     perl -MPOSIX=setpgid -e '
         my $seconds = shift;

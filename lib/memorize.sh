@@ -4,7 +4,7 @@ memorize_generate() {
     build_memorize_prompt "$MEMORY_TMP/prompt" "$MEMORY_TMP/lesson" "$MEMORY_TMP/previous"
     mkdir "$MEMORY_TMP/empty"
     MEMORY_FAILURE="Couldn't save that lesson: Codex failed or timed out."
-    codex_text 300 "$MEMORY_TMP/empty" "$MEMORY_TMP/output" "$MEMORY_TMP/prompt" text
+    codex_text "$REPO" 300 "$MEMORY_TMP/empty" "$MEMORY_TMP/output" "$MEMORY_TMP/prompt" text
     MEMORY_FAILURE="Couldn't save that lesson: Codex returned an invalid lessons list."
     validate_lessons "$MEMORY_TMP/output"
 }

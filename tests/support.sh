@@ -24,6 +24,12 @@ local_origin() {
     git clone -q --no-checkout "$FIXTURE_DIR/origin.git" "$WORK_DIR/o/r"
 }
 
+# Sets one field of the first repository in the fixture's repos.json.
+repos_set() {
+    jq --arg key "$1" --arg value "$2" '.repos[0][$key] = $value' "$ROOT/repos.json" > "$ROOT/repos.next"
+    mv "$ROOT/repos.next" "$ROOT/repos.json"
+}
+
 review_setup() {
     local source_root="$PR_REVIEWER_ROOT"
     . "$source_root/tests/support.sh"
@@ -35,7 +41,8 @@ review_setup() {
     mkdir -p "$STATE_DIR"
     cp -R "$source_root/prompts" "$ROOT/prompts"
     cp "$source_root/rules.md" "$source_root/lessons.md" "$ROOT/"
-    printf 'TRUSTED_USERS=(alice)\nTEST_CMDS=()\n' > "$PR_REVIEWER_CONFIG"
+    : > "$PR_REVIEWER_CONFIG"
+    printf '{"repos":[{"repo":"o/r","trusted_users":["alice"]}]}\n' > "$ROOT/repos.json"
     export PATH="$source_root/tests/fakes:$PATH"
     export FAKE_LOG="$ROOT/fake.log" FAKE_POSTS="$ROOT/posts" FAKE_CODEX_OUT="$ROOT/output" FAKE_GH_META="$ROOT/meta" FAKE_GH_COMMENTS="$ROOT/comments"
     export FAKE_CODEX_MCP_LIST='[{"name":"local"}]'

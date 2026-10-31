@@ -70,7 +70,7 @@ review_data() {
 }
 
 review_codex() {
-    codex_text "$REVIEW_TIMEOUT_SECS" "$REVIEW_WT" "$REVIEW_TMP/output" "$REVIEW_TMP/prompt"
+    codex_text "$REPO" "$REVIEW_TIMEOUT_SECS" "$REVIEW_WT" "$REVIEW_TMP/output" "$REVIEW_TMP/prompt"
     validate_review "$REVIEW_TMP/output"
 }
 
