@@ -28,7 +28,10 @@ function request(port, { method = 'GET', url = '/', headers = {}, body } = {}) {
     const req = http.request({ host: '127.0.0.1', port, method, path: url, headers: { Host: `127.0.0.1:${port}`, ...headers } }, (res) => {
       let text = '';
       res.on('data', (chunk) => (text += chunk));
-      res.on('end', () => resolve({ status: res.statusCode, body: text ? JSON.parse(text) : null }));
+      res.on('end', () => {
+        const json = /json/.test(res.headers['content-type'] || '');
+        resolve({ status: res.statusCode, headers: res.headers, text, body: json && text ? JSON.parse(text) : null });
+      });
     });
     req.on('error', reject);
     req.end(body);
@@ -135,4 +138,29 @@ test('unknown paths are 404 and wrong methods are 405', () =>
     assert.equal((await request(port, { url: '/api/nope' })).status, 404);
     assert.equal((await request(port, { method: 'DELETE', url: '/api/repos' })).status, 405);
     assert.equal((await request(port, { method: 'POST', url: '/api/activity' })).status, 405);
+  }));
+
+test('serves the page with a strict content security policy', () =>
+  withServer(async ({ port }) => {
+    const page = await request(port, { url: '/' });
+    assert.equal(page.status, 200);
+    assert.match(page.headers['content-type'], /^text\/html/);
+    assert.match(page.text, /<title>/);
+    assert.match(page.headers['content-security-policy'], /default-src 'self'/);
+    assert.match(page.headers['content-security-policy'], /frame-ancestors 'none'/);
+    assert.match((await request(port, { url: '/app.js' })).headers['content-type'], /javascript/);
+    assert.match((await request(port, { url: '/style.css' })).headers['content-type'], /css/);
+  }));
+
+test('static files cannot escape the public folder', () =>
+  withServer(async ({ port }) => {
+    for (const url of ['/server.js', '/../server.js', '/%2e%2e%2fserver.js', '/..%2fserver.js', '/%00', '/%zz', '/.hidden', '/public/app.js']) {
+      assert.equal((await request(port, { url })).status, 404, url);
+    }
+    assert.equal((await request(port, { method: 'POST', url: '/' })).status, 404);
+  }));
+
+test('the page is also refused to foreign hosts', () =>
+  withServer(async ({ port }) => {
+    assert.equal((await request(port, { url: '/', headers: { Host: 'evil.example' } })).status, 403);
   }));

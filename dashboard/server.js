@@ -4,6 +4,12 @@ const http = require('node:http');
 const path = require('node:path');
 const { validateRepos } = require('./validate');
 
+const PUBLIC_DIR = path.join(__dirname, 'public');
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
+const PAGE_HEADERS = {
+  'Cache-Control': 'no-store',
+  'Content-Security-Policy': "default-src 'self'; frame-ancestors 'none'",
+};
 const MAX_BODY = 64 * 1024;
 const LOG_LINES = 200;
 
@@ -94,6 +100,31 @@ async function putRepos(req, file) {
   return result.value;
 }
 
+// Serves the flat public folder: a name is a plain file name, never a path.
+function pageFile(pathname) {
+  let name;
+  try {
+    name = pathname === '/' ? 'index.html' : decodeURIComponent(pathname.slice(1));
+  } catch {
+    return null;
+  }
+  const type = TYPES[path.extname(name)];
+  return type && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name) ? { file: path.join(PUBLIC_DIR, name), type } : null;
+}
+
+function sendPage(res, pathname) {
+  const page = pageFile(pathname);
+  let content;
+  try {
+    content = page && fs.readFileSync(page.file);
+  } catch {
+    content = null;
+  }
+  if (!content) throw new HttpError(404, 'not found');
+  res.writeHead(200, { ...PAGE_HEADERS, 'Content-Type': page.type });
+  res.end(content);
+}
+
 function createServer({ root }) {
   const reposFile = path.join(root, 'repos.json');
   const routes = {
@@ -113,8 +144,12 @@ function createServer({ root }) {
 
   async function handle(req, res) {
     if (!sameOrigin(req, server.address().port)) throw new HttpError(403, 'forbidden');
-    const route = routes[new URL(req.url, 'http://localhost').pathname];
-    if (!route) throw new HttpError(404, 'not found');
+    const { pathname } = new URL(req.url, 'http://localhost');
+    const route = routes[pathname];
+    if (!route) {
+      if (req.method !== 'GET' || pathname.startsWith('/api/')) throw new HttpError(404, 'not found');
+      return sendPage(res, pathname);
+    }
     const action = route[req.method];
     if (!action) throw new HttpError(405, 'method not allowed');
     send(res, 200, await action(req));

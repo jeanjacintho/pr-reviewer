@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PR Reviewer</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="bar">
+    <h1>PR Reviewer</h1>
+    <div class="bar-actions">
+      <span id="status" class="status" role="status"></span>
+      <button id="save" class="primary" type="button" disabled>Save changes</button>
+    </div>
+  </header>
+
+  <main>
+    <section aria-labelledby="repos-title">
+      <h2 id="repos-title">Repositories</h2>
+      <div id="load-error" class="errors load-error" hidden>
+        <span id="load-error-text"></span>
+        <button id="retry" type="button">Retry</button>
+      </div>
+      <fieldset id="editor" class="editor" disabled>
+      <div class="section-head">
+        <form id="add-form" class="add-form">
+          <label class="sr-only" for="add-repo">Repository</label>
+          <input id="add-repo" placeholder="owner/name" autocomplete="off" spellcheck="false" required>
+          <button type="submit">Add repository</button>
+        </form>
+      </div>
+      <ul id="errors" class="errors" hidden></ul>
+      <div id="repos" class="repos"></div>
+      <datalist id="models"></datalist>
+      </fieldset>
+    </section>
+
+    <section class="activity" aria-labelledby="reviews-title">
+      <div class="section-head">
+        <h2 id="reviews-title">Recent reviews</h2>
+        <button id="refresh" type="button">Refresh</button>
+      </div>
+      <ul id="reviews" class="reviews"></ul>
+    </section>
+
+    <section class="activity" aria-labelledby="log-title">
+      <h2 id="log-title">Poll log</h2>
+      <pre id="log" class="log" tabindex="0"></pre>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
