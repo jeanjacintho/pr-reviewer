@@ -74,13 +74,21 @@ review_run() {
     validate_review "$REVIEW_TMP/output"
 }
 
-review_publish() {
-    local label='Full review'
+# Footer in normal text size, signed so readers know a bot wrote the review.
+review_footer() {
+    local label='Full review' login author='a PR review bot'
     if [ "$MODE" = update ]; then label='Update review'; fi
+    login="$(bot_login 2>/dev/null)" || login=''
+    if [ -n "$login" ]; then author="@$login's PR review bot"; fi
+    printf '\n\n---\n\n**%s** at `%s` · comment `/%s-update-review` after your next push · `/%s-memorize <lesson>` to teach me\n\n' "$label" "${HEAD_SHA:0:7}" "$CMD_PREFIX" "$CMD_PREFIX"
+    printf '🤖 This review was written by %s, not typed by hand.\n%s\n' "$author" "$MARKER"
+}
+
+review_publish() {
     {
         if [ -n "$FALLBACK_NOTE" ]; then printf '%s\n\n' "$FALLBACK_NOTE"; fi
         cat "$REVIEW_TMP/output"
-        printf '\n\n<sub>%s at %s · `/%s-update-review` after your next push · `/%s-memorize <lesson>` to teach me</sub>\n%s\n' "$label" "${HEAD_SHA:0:7}" "$CMD_PREFIX" "$CMD_PREFIX" "$MARKER"
+        review_footer
     } > "$REVIEW_TMP/comment"
     post_once "$REVIEW_TMP/comment"
     reviewed_set "$REPO" "$PR" "$HEAD_SHA"

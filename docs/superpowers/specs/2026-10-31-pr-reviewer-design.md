@@ -162,12 +162,17 @@ _It appears @<author> is working towards <user-facing outcome> — reviewing aga
 
 VERDICT: APPROVE | APPROVE — pending: <low items> | COMMENT
 
-<sub>Full review at def5678 · `/jeanjacintho-update-review` after your next push · `/jeanjacintho-memorize <lesson>` to teach me</sub>
+---
+
+**Full review** at `def5678` · comment `/jeanjacintho-update-review` after your next push · `/jeanjacintho-memorize <lesson>` to teach me
+
+🤖 This review was written by @jeanjacintho's PR review bot, not typed by hand.
 <!-- jeanjacintho-reviewer -->
 ```
 
 Regras do formato:
 
+- **Rodapé** (adendo de 2026-10-31, pedido do Jean): no mesmo tamanho do texto (sem `<sub>`), separado por uma linha, e assinado pelo bot com o login da conta que posta (`gh api user`); se o login não puder ser lido, diz "a PR review bot". Revisões antigas com o rodapé `<sub>` continuam reconhecidas como revisão anterior.
 - **Primeira linha:** intenção inferida do PR, em itálico — o objetivo do ponto de vista do usuário final, não a lista de mudanças.
 - **Gravidades:** `blocking` > `medium` > `low` > `nit`; `[open]` é uma pergunta cuja resposta decide se é problema. Ordenados por gravidade; dentro da mesma faixa, `bug` antes de `contract`/`shape` antes de `simplification`.
 - **Classes:** `bug`, `security`, `data-integrity`, `contract` (quebra de contrato com quem chama/consome), `simplification` (duplicação, código morto, complexidade desnecessária), `tests`.

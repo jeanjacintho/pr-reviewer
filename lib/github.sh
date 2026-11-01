@@ -18,11 +18,17 @@ post_comment() {
     gh pr comment "$2" -R "$1" --body-file "$3"
 }
 
+# The GitHub account the bot posts as.
+bot_login() {
+    gh api user --jq .login
+}
+
+# Recognizes the current footer and the older small-print one.
 prev_review() {
     local login
-    login="$(gh api user --jq .login)" || return
+    login="$(bot_login)" || return
     gh api --paginate "repos/$1/issues/$2/comments" | jq -rs --arg marker "$MARKER" --arg login "$login" '
-        [ .[][] | select(.user.login == $login) | select(.body | contains($marker) and test("(^|\\n)<sub>(Full|Update) review at ") and test("(^|\\n)VERDICT: (APPROVE( — pending: .+)?|COMMENT)(\\n|$)")) ] | sort_by(.created_at, .id) | last | .body // empty'
+        [ .[][] | select(.user.login == $login) | select(.body | contains($marker) and test("(^|\\n)(<sub>|\\*\\*)?(Full|Update) review(\\*\\*)? at ") and test("(^|\\n)VERDICT: (APPROVE( — pending: .+)?|COMMENT)(\\n|$)")) ] | sort_by(.created_at, .id) | last | .body // empty'
 }
 
 pr_meta() {

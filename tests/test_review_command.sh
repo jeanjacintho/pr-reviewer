@@ -5,7 +5,9 @@ test_review_full_posts_once() {
     bash "$REVIEW_SCRIPT" full o/r 7 command || fail review
     assert_one_review_comment
     assert_eq "$HEAD_SHA" "$(reviewed_get o/r 7)"
-    assert_contains "$(cat "$FAKE_POSTS")" '<sub>Full review at '
+    assert_contains "$(cat "$FAKE_POSTS")" "**Full review** at \`${HEAD_SHA:0:7}\`"
+    assert_contains "$(cat "$FAKE_POSTS")" "🤖 This review was written by @alice's PR review bot, not typed by hand."
+    assert_not_contains "$(cat "$FAKE_POSTS")" '<sub>'
     assert_contains "$(cat "$FAKE_LOG")" 'content=EYES'
     assert_contains "$(cat "$FAKE_LOG")" 'content=HOORAY'
     assert_contains "$(cat "$FAKE_LOG")" 'removeReaction(input:'
@@ -32,7 +34,7 @@ test_review_update_and_fallback() {
     reviewed_set o/r 7 "$PRIOR_SHA"
     bash "$REVIEW_SCRIPT" update o/r 7 command || fail update
     assert_contains "$(cat "$FAKE_LOG.stdin")" "Mode: update (since $PRIOR_SHA)"
-    assert_contains "$(cat "$FAKE_POSTS")" '<sub>Update review at '
+    assert_contains "$(cat "$FAKE_POSTS")" '**Update review** at '
     perl -0777 -ne '($d)=/<data name="diff">(.*?)<\/data>/s; exit !($d =~ /second change/ && $d !~ /\+first change/)' "$FAKE_LOG.stdin" || fail scope
     reviewed_set o/r 7 deadbeef
     bash "$REVIEW_SCRIPT" update o/r 7 command || fail fallback
@@ -162,6 +164,18 @@ test_review_unknown_engine_fails_once_without_running_anything() {
     assert_not_contains "$(cat "$FAKE_LOG")" 'codex '
     assert_not_contains "$(cat "$FAKE_LOG")" 'claude '
     assert_contains "$(cat "$STATE_DIR/poll.log")" 'Unknown review engine for o/r'
+}
+
+# The login is looked up again for the footer, after the engine ran; failing
+# there must not lose the review.
+test_review_signature_survives_an_unknown_login() {
+    review_setup
+    local bin="$(mktmp)" real_gh="$(command -v gh)"
+    printf '#!/bin/bash\nif [ "$*" = "api user --jq .login" ] && [ -e "%s/login-seen" ]; then exit 1; fi\n[ "$*" != "api user --jq .login" ] || touch "%s/login-seen"\nexec "%s" "$@"\n' "$bin" "$bin" "$real_gh" > "$bin/gh"
+    chmod +x "$bin/gh"
+    PATH="$bin:$PATH" bash "$REVIEW_SCRIPT" full o/r 7 command || fail review
+    assert_one_review_comment
+    assert_contains "$(cat "$FAKE_POSTS")" '🤖 This review was written by a PR review bot, not typed by hand.'
 }
 
 test_review_github_failure_does_not_publish_twice() {

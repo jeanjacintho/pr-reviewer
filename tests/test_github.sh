@@ -20,6 +20,21 @@ $MARKER"
     assert_eq '' "$(prev_review o/r 7)"
 }
 
+test_previous_review_finds_the_current_footer() {
+    github_setup
+    local review="A newer review
+VERDICT: COMMENT
+
+---
+
+**Update review** at \`abc1234\` · comment \`/x-update-review\` after your next push
+
+🤖 This review was written by @alice's PR review bot, not typed by hand.
+$MARKER"
+    jq -n --arg review "$review" '[{id:1,created_at:"2026-10-30",user:{login:"alice"},body:$review}]' > "$FAKE_GH_COMMENTS"
+    assert_eq "$review" "$(prev_review o/r 7)"
+}
+
 test_github_operations() {
     github_setup
     react node EYES || fail react
