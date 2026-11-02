@@ -9,6 +9,7 @@ FILTER="${1:-}"
 TEST_TMP_ROOT="$(mktemp -d)"
 export TEST_TMP_ROOT
 export PR_REVIEWER_CONFIG="$TEST_TMP_ROOT/config-absent"
+export GH_RETRY_DELAY=0
 export PATH="$TESTS_DIR/fakes:$PATH"
 trap 'rm -rf "$TEST_TMP_ROOT"' EXIT
 
