@@ -6,8 +6,15 @@ for arg in "$@"; do
     case "$arg" in 'mcp_servers."'*) printf 'Invalid MCP transport override\n' >&2; exit 64 ;; esac
 done
 case "$*" in *'mcp list --json') printf '%s\n' "${FAKE_CODEX_MCP_LIST:-[]}"; exit 0 ;; esac
-cat > "$FAKE_LOG.stdin"
+input="$(mktemp "$FAKE_LOG.in.XXXXXX")"
+cat > "$input"
+cp "$input" "$FAKE_LOG.stdin"
 if [ -n "${FAKE_CODEX_SLEEP:-}" ]; then sleep "$FAKE_CODEX_SLEEP"; fi
 while [ "$1" != --output-last-message ]; do shift; done
-cp "$FAKE_CODEX_OUT" "$2"
+if [ -n "${FAKE_STAGES:-}" ]; then
+    "$(dirname "$0")/stage-reply" "$input" > "$2"
+else
+    cp "$FAKE_CODEX_OUT" "$2"
+fi
+rm -f "$input"
 exit "${FAKE_CODEX_EXIT:-0}"

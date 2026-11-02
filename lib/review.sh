@@ -1,6 +1,7 @@
 review_cleanup() {
     trap - ERR
     set +e
+    deep_stop
     if [ -n "$TEST_PID" ]; then wait "$TEST_PID" 2>/dev/null; fi
     if [ -n "$TEST_WT" ]; then cleanup_worktree "$TEST_WT" >/dev/null 2>&1; fi
     if [ -n "$REVIEW_WT" ]; then cleanup_worktree "$REVIEW_WT" >/dev/null 2>&1; fi
@@ -50,7 +51,7 @@ review_tests_start() {
     esac
 }
 
-review_data() {
+review_inputs() {
     local base merge_base body
     base="$(printf '%s' "$PR_JSON" | jq -r .baseRefName)"
     merge_base="$(git -C "$REVIEW_WT" merge-base "origin/$base" "$HEAD_SHA")"
@@ -65,13 +66,32 @@ review_data() {
     body="$(comment_body "$COMMENT_ID")"
     FOCUS="$(parse_command "$body")"
     FOCUS="${FOCUS#*$'\t'}"
+}
+
+review_wait_tests() {
     if [ -n "$TEST_PID" ]; then wait "$TEST_PID"; TEST_PID=''; fi
+}
+
+# The one-call review needs its single prompt now; a deep review builds one
+# prompt per stage later.
+review_data() {
+    review_inputs
+    if [ "$DEPTH" = deep ]; then return; fi
+    review_wait_tests
     build_review_prompt "$REVIEW_TMP/prompt" "$MODE"
 }
 
-review_run() {
+review_quick() {
     engine_text "$REPO" "$REVIEW_TIMEOUT_SECS" "$REVIEW_WT" "$REVIEW_TMP/output" "$REVIEW_TMP/prompt"
     validate_review "$REVIEW_TMP/output"
+}
+
+review_run() {
+    case "$DEPTH" in
+        quick) review_quick ;;
+        deep) deep_review ;;
+        *) log "Unknown review depth for $REPO"; return 1 ;;
+    esac
 }
 
 # Footer in normal text size, signed so readers know a bot wrote the review.
@@ -84,9 +104,16 @@ review_footer() {
     printf '🤖 This review was written by %s, not typed by hand.\n%s\n' "$author" "$MARKER"
 }
 
+review_notes() {
+    local note
+    for note in "$FALLBACK_NOTE" "${PARTIAL_NOTE:-}"; do
+        if [ -n "$note" ]; then printf '%s\n\n' "$note"; fi
+    done
+}
+
 review_publish() {
     {
-        if [ -n "$FALLBACK_NOTE" ]; then printf '%s\n\n' "$FALLBACK_NOTE"; fi
+        review_notes
         cat "$REVIEW_TMP/output"
         review_footer
     } > "$REVIEW_TMP/comment"
@@ -100,7 +127,7 @@ review_main() {
     local requested="$1"
     REPO="$2" PR="$3" COMMENT_ID="$4"
     REVIEW_TMP="$(mktemp -d)"
-    REVIEW_WT='' TEST_WT='' TEST_PID='' POST_ATTEMPTED=no HAS_EYES=yes
+    REVIEW_WT='' TEST_WT='' TEST_PID='' DEEP_PIDS='' POST_ATTEMPTED=no HAS_EYES=yes
     trap review_cleanup EXIT
     trap 'command_failed "$?" "Review failed: $PHASE. Comment the command again to retry." "$REVIEW_TMP"' ERR
     PHASE='could not prepare PR'
@@ -110,6 +137,7 @@ review_main() {
     HEAD_SHA="$(git -C "$REVIEW_WT" rev-parse HEAD)"
     PR_JSON="$(printf '%s' "$PR_JSON" | jq --arg sha "$HEAD_SHA" '.headRefOid = $sha')"
     review_mode "$requested"
+    DEPTH="$(repo_depth "$REPO")"
     if [ "$MODE" = noop ]; then review_noop; return; fi
     DIFF_FILE="$REVIEW_TMP/diff" FULL_DIFF_FILE="$REVIEW_TMP/full-diff"
     TEST_RESULT_FILE="$REVIEW_TMP/tests" PREV_REVIEW_FILE="$REVIEW_TMP/previous"

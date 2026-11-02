@@ -6,7 +6,7 @@ codex_safety() {
         CODEX_SAFETY_ARGS+=( --disable "$feature" )
     done
     # Keep quoted names inside a TOML value; CLI override paths split on dots.
-    servers="$(run_with_timeout 30 codex "${CODEX_SAFETY_ARGS[@]}" -C "$directory" mcp list --json < /dev/null | jq -r 'map((.name | tojson) + "={enabled=false}") | join(",")')"
+    servers="$(run_with_timeout 30 codex "${CODEX_SAFETY_ARGS[@]}" -C "$directory" mcp list --json < /dev/null | jq -r 'map((.name | tojson) + "={enabled=false}") | join(",")')" || return 1
     CODEX_SAFETY_ARGS+=( -c "mcp_servers={$servers}" )
 }
 
@@ -15,7 +15,7 @@ codex_text() {
     model="$(repo_model "$repo")"
     model="${model:-$CODEX_MODEL}"
     effort="$(repo_effort "$repo")"
-    codex_safety "$directory"
+    codex_safety "$directory" || return 1
     local args=(exec --sandbox read-only -C "$directory" --output-last-message "$output")
     args+=( "${CODEX_SAFETY_ARGS[@]}" )
     if [ "${6:-}" = text ]; then args+=( --skip-git-repo-check --disable shell_tool --disable view_image ); fi

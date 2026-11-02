@@ -2,6 +2,13 @@
 set -euo pipefail
 printf 'claude %s\n' "$*" >> "$FAKE_LOG"
 printf '%s\n' "$PWD" > "$FAKE_LOG.claude-pwd"
-cat > "$FAKE_LOG.stdin"
-cat "${FAKE_CLAUDE_OUT:-$FAKE_CODEX_OUT}"
+input="$(mktemp "$FAKE_LOG.in.XXXXXX")"
+cat > "$input"
+cp "$input" "$FAKE_LOG.stdin"
+if [ -n "${FAKE_STAGES:-}" ]; then
+    "$(dirname "$0")/stage-reply" "$input"
+else
+    cat "${FAKE_CLAUDE_OUT:-$FAKE_CODEX_OUT}"
+fi
+rm -f "$input"
 exit "${FAKE_CLAUDE_EXIT:-0}"

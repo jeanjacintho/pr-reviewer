@@ -53,7 +53,7 @@ Evidence: `path:line` — <what the code shows>
 ### Task 4: pipeline
 - [ ] Tests first with the fake engines (outputs chosen per stage by a marker in the prompt): the happy path calls the engine 12 times and posts one comment; `NO HYPOTHESES` skips that angle's verification; a failed angle → `Partial review:` note; all angles failed → one error comment; a failed write-up → one error comment; never more than `DEEP_PARALLEL` concurrent calls (the fake records start/end); a timed-out stage is killed; `quick` still makes one call.
 - [ ] Implement `lib/deep.sh`: the intent runs alongside the tests; after the tests, each angle runs as one job (angle, then its verification) under a concurrency limit built from `jobs`/`wait` (Bash 3.2, no `wait -n`); then the merge and the write-up. `review_run` dispatches on `repo_depth`. One `Stage <name> <repo>#<pr> took <n>s` log line per stage.
-- [ ] `config.example.sh` / `lib/common.sh`: `DEEP_PARALLEL=3`, `STAGE_TIMEOUT_SECS=600`. The stale-lock threshold in `lib/poll.sh` covers the worst deep case.
+- [ ] `config.example.sh` / `lib/common.sh`: `DEEP_PARALLEL=3`, `STAGE_TIMEOUT_SECS=600`. `lib/poll.sh` keeps its lock rule: a lock is only taken from a dead poll, so a live deep review never loses it by age.
 
 ### Task 5: try-review
 - [ ] Tests first: `tools/try-review` prints the comment and makes no GitHub write (the fake `gh` fails on any write verb).

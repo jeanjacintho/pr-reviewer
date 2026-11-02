@@ -8,6 +8,11 @@ findings; they arrive as data. They are the only source of findings.
   to make the edit specific.
 - A finding marked `Verified: open` could not be settled. Write it as an `[open]`
   item with a question, never as `blocking`, whatever severity it carried.
+- End every numbered finding with an HTML comment naming the supplied findings
+  it comes from, using the identifiers in their headings, for example
+  `<!-- src: correctness/H1, tests/H2 -->`. A finding cannot be rated more
+  serious than the `Verified: yes` findings it cites, and one that cites only
+  `Verified: open` findings must be an `[open]` item.
 - When several findings come from one cause, write one finding, with the highest
   severity and all the files.
 - Do not add findings of your own, and do not drop a confirmed one unless it
