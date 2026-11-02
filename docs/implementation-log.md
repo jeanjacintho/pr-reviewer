@@ -97,3 +97,14 @@ Implemented per `docs/superpowers/plans/2026-10-31-engines.md` in commits `6a26c
 
 - Live check (2026-10-31): `jeanjacintho/pr-reviewer` was switched through the dashboard API to Claude Code (`sonnet`, effort `low`). On the disposable PR [#3](https://github.com/jeanjacintho/pr-reviewer/pull/3) the command was dispatched within a poll cycle, a `claude -p --restricted …` run was observed, and exactly one review was posted (APPROVE, tests 122/122 included, HOORAY reaction) about 35 seconds after dispatch. The PR was closed, its branch and worktree removed, and the repository set back to Codex with defaults.
 - Before implementing, Claude Code with these flags was checked by hand: it could not create a file, run a shell command, read outside the working directory or fetch a URL.
+
+
+## Retry of short GitHub failures
+
+Trigger: on 2026-11-02 a finished review of `jeanjacintho/motes#50` was lost when three GraphQL calls (add reaction, `gh pr comment`, remove reaction) failed within 12 seconds with `Something went wrong while executing your query`; poll.log only said `Could not add reaction`, and the trigger was already in `seen.json`.
+
+- `lib/github.sh`: `gh_retry` wraps every `gh` call of the review path (reactions, comment, PR metadata, comment reads, `api user`). It retries only transient errors (GraphQL "Something went wrong", HTTP 5xx/429, secondary rate limit, connection errors, timeouts) with a linear delay; 4xx is never retried. `GH_RETRY_ATTEMPTS` (4) and `GH_RETRY_DELAY` (3 s) live in `lib/common.sh` and `config.example.sh`; `tests/run.sh` sets the delay to 0.
+- The final failure logs the first line of gh's error, request id included, to poll.log.
+- `post_comment` keeps one comment per review: before a retry it looks for an identical comment by the bot from the last 5 minutes and treats it as posted; if that lookup fails, the attempt fails instead of risking a duplicate. Each attempt buffers its output so a failed response never mixes with the successful one. `post_once` and its tests are unchanged.
+- Fake `gh` gained `FAKE_GH_FAIL_FIRST`, `FAKE_GH_FLAKY_MATCH`, `FAKE_GH_FAIL_TEXT` and `FAKE_GH_FAIL_LANDS`. Tests cover transient success, permanent failure, 4xx without retry, a post that reached GitHub, and a whole review surviving an outage on `pr comment`.
+- Not done: keeping the review text across polls.

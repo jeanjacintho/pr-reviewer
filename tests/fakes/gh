@@ -4,6 +4,25 @@ printf 'gh %s\n' "$*" >> "$FAKE_LOG"
 if [ -n "${FAKE_GH_FAIL_MATCH:-}" ]; then
     case "$*" in *"$FAKE_GH_FAIL_MATCH"*) exit 1 ;; esac
 fi
+# Fails the first FAKE_GH_FAIL_FIRST calls that match FAKE_GH_FLAKY_MATCH with
+# FAKE_GH_FAIL_TEXT (default: the real GraphQL outage). A flaky pr comment still
+# reaches the "server" when FAKE_GH_FAIL_LANDS is set.
+if [ -n "${FAKE_GH_FAIL_FIRST:-}" ]; then
+    case "$*" in
+        *"${FAKE_GH_FLAKY_MATCH:-}"*)
+            count="$(cat "$FAKE_GH_COUNTER" 2>/dev/null || echo 0)"
+            if [ "$count" -lt "$FAKE_GH_FAIL_FIRST" ]; then
+                echo $((count + 1)) > "$FAKE_GH_COUNTER"
+                if [ -n "${FAKE_GH_FAIL_LANDS:-}" ]; then
+                    case "$*" in 'pr comment '*) while [ "$1" != --body-file ]; do shift; done
+                        cat "$2" >> "$FAKE_POSTS"; printf '\n===COMMENT===\n' >> "$FAKE_POSTS" ;; esac
+                fi
+                [ -z "${FAKE_GH_FAIL_STDOUT:-}" ] || echo "$FAKE_GH_FAIL_STDOUT"
+                echo "${FAKE_GH_FAIL_TEXT:-Something went wrong while executing your query. Please include 0DEF:1234:5678 when reporting this issue.}" >&2
+                exit 1
+            fi ;;
+    esac
+fi
 case "$*" in
     *'repository('*|*'repository(owner:'*) cat "$FAKE_GH_PRS" ;;
     'repo clone '*) git clone --no-checkout "$FAKE_GH_ORIGIN" "$4" ;;
