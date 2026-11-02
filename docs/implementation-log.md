@@ -108,3 +108,7 @@ Trigger: on 2026-11-02 a finished review of `jeanjacintho/motes#50` was lost whe
 - `post_comment` keeps one comment per review: before a retry it looks for an identical comment by the bot from the last 5 minutes and treats it as posted; if that lookup fails, the attempt fails instead of risking a duplicate. Each attempt buffers its output so a failed response never mixes with the successful one. `post_once` and its tests are unchanged.
 - Fake `gh` gained `FAKE_GH_FAIL_FIRST`, `FAKE_GH_FLAKY_MATCH`, `FAKE_GH_FAIL_TEXT` and `FAKE_GH_FAIL_LANDS`. Tests cover transient success, permanent failure, 4xx without retry, a post that reached GitHub, and a whole review surviving an outage on `pr comment`.
 - Not done: keeping the review text across polls.
+
+## Pre-commit AI review removed (2026-11-02)
+
+`tools/review`, its reviewer prompt (`tools/prompts/reviewer.md`), the `reviewer` agent and `tests/test_review.sh` were removed at the owner's request: every pass spent tokens on the owner's Codex or Claude plan, and one task needed eight passes. The check before a commit is now `tools/gate` plus reading the diff. The earlier entries above still describe what was done at the time. The bot's own PR reviews are unchanged.

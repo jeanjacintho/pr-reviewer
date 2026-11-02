@@ -64,6 +64,6 @@ Evidence: `path:line` — <what the code shows>
 - [ ] Verify in the browser (light, dark, phone).
 
 ### Task 7: ship and measure
-- [ ] Gate, independent review, commit; pull into the installed checkout; restart the dashboard job only if server code changed.
+- [ ] Gate, commit; pull into the installed checkout; restart the dashboard job only if server code changed.
 - [ ] With Jean's PRs whose bugs the bot missed: run `tools/try-review` in `quick` and `deep`, and record in `docs/implementation-log.md` which known bugs each one caught, the time taken, and the call count.
 - [ ] Switch repositories to `deep` only if Jean agrees after seeing that comparison.

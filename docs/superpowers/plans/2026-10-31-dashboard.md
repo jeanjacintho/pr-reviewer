@@ -86,4 +86,4 @@
 
 - [ ] Failing test: installer renders a second plist (`com.jeanjacintho.pr-reviewer-dashboard`, `KeepAlive`, PATH with `/opt/homebrew/bin`) and checks `node` on that PATH; uninstall removes it.
 - [ ] Document usage and the Node exception; commit `feat(install): run the dashboard as a launchd service`.
-- [ ] Final: `tools/gate`, `tools/review`, then a live check that a change made in the page is used by the next poll.
+- [ ] Final: `tools/gate`, then a live check that a change made in the page is used by the next poll.

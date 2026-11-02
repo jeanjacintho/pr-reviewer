@@ -53,20 +53,15 @@ then crapper, dryer and mutator, and prints a short summary (`Gate: PASS` or
 mutates everything. All tools take `--help`. They analyze the project's Bash
 and jq code outside `tests/` and `tools/`.
 
-## Review
-
-After a plan task is implemented, and before committing it, get an
-independent review with `tools/review` (`--engine codex|claude`, default
-codex or `REVIEW_ENGINE`; `--range REF..REF`, free text adds a focus). Prefer
-the engine that did not write the change. The reviewer prompt is
-`tools/prompts/reviewer.md`, read-only, and shared by both engines.
-
-Claude Code also exposes `quality-gate` and `reviewer` agents in
-`.claude/agents/`; they only wrap the two commands above.
+Claude Code also exposes a `quality-gate` agent in `.claude/agents/`; it only
+wraps the command above. There is no AI review step before a commit: the gate
+and reading your own diff are the check, and nothing calls Codex or Claude as
+a reviewer.
 
 ## Commits
 
 Conventional Commits in English: `type(scope): summary` with types `feat`,
 `fix`, `refactor`, `test`, `docs`, `chore`. The body says why, what changed
-and how it was verified. Small, ordered commits on `main`. There is no
-remote yet; push only once one exists.
+and how it was verified. Small, ordered commits. The remote is `origin` on
+GitHub: changes go up as a pull request for the owner to merge, not as a
+push to `main`.
