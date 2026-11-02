@@ -18,8 +18,11 @@ def trusted_logins($repo):
 def model_of($repo): [of($repo) | .model? | strings | select(test(model_re))][0] // "";
 
 # A missing engine means Codex; an unknown one yields "" so the review fails visibly.
-def engine_of($repo): [of($repo) | (.engine // "codex") | select(type == "string" and IN("codex", "claude"))][0] // "";
+def engine_of($repo): [of($repo) | (if has("engine") then .engine else "codex" end) | select(type == "string" and IN("codex", "claude"))][0] // "";
 
 def effort_of($repo): [of($repo) | .effort? | strings | select(test(effort_re))][0] // "";
+
+# A missing depth means quick; an unknown one yields "" so the review fails visibly.
+def depth_of($repo): [of($repo) | (if has("depth") then .depth else "quick" end) | select(type == "string" and IN("quick", "deep"))][0] // "";
 
 def test_cmd_of($repo): [of($repo) | .test_cmd? | strings][0] // "";

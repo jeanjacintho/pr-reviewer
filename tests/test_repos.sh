@@ -99,11 +99,12 @@ test_repos_bad_json_is_logged_not_fatal() {
 }
 
 test_repos_engine_defaults_to_codex_and_rejects_unknown() {
-    repos_setup '{"repos":[{"repo":"o/a"},{"repo":"o/b","engine":"claude"},{"repo":"o/c","engine":"other-cli"},{"repo":"o/d","engine":5}]}'
+    repos_setup '{"repos":[{"repo":"o/a"},{"repo":"o/b","engine":"claude"},{"repo":"o/c","engine":"other-cli"},{"repo":"o/d","engine":5},{"repo":"o/e","engine":null}]}'
     assert_eq codex "$(repo_engine o/a)"
     assert_eq claude "$(repo_engine O/B)"
     assert_eq '' "$(repo_engine o/c)"
     assert_eq '' "$(repo_engine o/d)"
+    assert_eq '' "$(repo_engine o/e)"
 }
 
 test_repos_effort_is_a_plain_word() {
@@ -112,4 +113,15 @@ test_repos_effort_is_a_plain_word() {
     assert_eq '' "$(repo_effort o/b)"
     assert_eq '' "$(repo_effort o/c)"
     assert_eq '' "$(repo_effort o/d)"
+}
+
+test_repos_depth_defaults_to_quick_and_rejects_unknown() {
+    repos_setup '{"repos":[{"repo":"o/a"},{"repo":"o/b","depth":"deep"},{"repo":"o/c","depth":"thorough"},{"repo":"o/d","depth":5},{"repo":"o/e","depth":"quick"},{"repo":"o/f","depth":null},{"repo":"o/g","depth":false}]}'
+    assert_eq quick "$(repo_depth o/a)"
+    assert_eq deep "$(repo_depth O/B)"
+    assert_eq '' "$(repo_depth o/c)"
+    assert_eq '' "$(repo_depth o/d)"
+    assert_eq quick "$(repo_depth o/e)"
+    assert_eq '' "$(repo_depth o/f)"
+    assert_eq '' "$(repo_depth o/g)"
 }

@@ -7,7 +7,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { createServer } = require('../server');
 
-const VALID = { repos: [{ repo: 'o/a', enabled: true, trusted_users: ['alice'], engine: 'codex', model: '', effort: '', test_cmd: '' }] };
+const VALID = { repos: [{ repo: 'o/a', enabled: true, trusted_users: ['alice'], engine: 'codex', depth: 'quick', model: '', effort: '', test_cmd: '' }] };
 
 async function withServer(fn) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-'));

@@ -36,6 +36,10 @@ repo_effort() {
     repos_query 'effort_of($r)' --arg r "$1"
 }
 
+repo_depth() {
+    repos_query 'depth_of($r)' --arg r "$1"
+}
+
 repo_test_cmd() {
     repos_query 'test_cmd_of($r)' --arg r "$1"
 }

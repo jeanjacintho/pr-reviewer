@@ -13,7 +13,7 @@ test_dashboard_output_is_read_by_the_bot() {
     node -e '
         const { validateRepos } = require(process.argv[1] + "/dashboard/validate");
         const result = validateRepos({ repos: [
-            { repo: "o/a", trusted_users: ["Alice", "bob"], engine: "claude", model: "gpt-x", effort: "high", test_cmd: "npm ci && npm test" },
+            { repo: "o/a", trusted_users: ["Alice", "bob"], engine: "claude", model: "gpt-x", effort: "high", depth: "deep", test_cmd: "npm ci && npm test" },
             { repo: "o/off", enabled: false, trusted_users: ["carol"] } ] });
         process.stdout.write(JSON.stringify(result.value));
     ' "$PR_REVIEWER_ROOT" > "$PR_REVIEWER_REPOS"
@@ -22,6 +22,8 @@ test_dashboard_output_is_read_by_the_bot() {
     assert_eq gpt-x "$(repo_model o/a)"
     assert_eq claude "$(repo_engine o/a)"
     assert_eq high "$(repo_effort o/a)"
+    assert_eq deep "$(repo_depth o/a)"
+    assert_eq quick "$(repo_depth o/off)"
     assert_eq codex "$(repo_engine o/off)"
     assert_eq 'npm ci && npm test' "$(repo_test_cmd o/a)"
 }
