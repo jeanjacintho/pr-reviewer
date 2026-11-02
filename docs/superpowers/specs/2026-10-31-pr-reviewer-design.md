@@ -224,7 +224,7 @@ Uma página web **só no Mac do Jean** para configurar o bot sem editar arquivos
 
 ## Motor de revisão por repositório (adendo de 2026-10-31, aprovado pelo Jean)
 
-Substitui "uma chamada Codex por revisão" por "uma chamada ao motor escolhido para o repositório". Continua **uma** chamada por revisão, sem pipeline.
+Substitui "uma chamada Codex por revisão" por "uma chamada ao motor escolhido para o repositório". Continua **uma** chamada por revisão, sem pipeline, na profundidade `quick`. A `deep` está no adendo "Revisão profunda em etapas".
 
 - `repos.json` ganha `engine` (`codex` ou `claude`; ausente = `codex`) e `effort` (vazio = padrão da CLI). `model` vazio continua sendo o padrão da CLI.
 - **Codex:** como antes, mais `-c model_reasoning_effort="<effort>"` quando `effort` não está vazio. O nível `ultra` (delegação automática) não é oferecido, porque multi-agente fica desligado por segurança.
@@ -234,6 +234,42 @@ Substitui "uma chamada Codex por revisão" por "uma chamada ao motor escolhido p
 - Revisões com Claude Code gastam o plano do Claude do Jean; Codex continua o padrão.
 - Activity também por repositório: a página de cada repo mostra as revisões e as linhas de log daquele repo; a página geral tem filtro por repo.
 
+## Revisão profunda em etapas (adendo de 2026-11-01, pedido do Jean)
+
+**Problema.** A revisão de uma chamada só deixa passar bugs reais que o Jean achou depois. Um prompt único divide a atenção entre todos os ângulos, nada obriga o modelo a seguir o código alterado para fora do diff, e nenhum achado é conferido antes de ir para o comentário.
+
+**Ideia.** Cada repositório escolhe a profundidade: `quick` (a revisão de uma chamada de hoje) ou `deep`. Na `deep`, a revisão vira um pipeline de etapas pequenas. Cada etapa tem um único trabalho e entrega para a próxima um texto num formato fixo, que o Bash valida.
+
+```
+intenção ──┬─ ângulo 1 → verificação ─┐
+           ├─ ângulo 2 → verificação ─┤
+           ├─ …                       ├─→ redação → comentário (formato de sempre)
+           └─ ângulo 5 → verificação ─┘
+```
+
+1. **Intenção** (1 chamada) — deduz, em uma ou duas frases, o resultado que o PR quer entregar ao usuário final. Roda enquanto os testes rodam. Se falhar, as outras etapas seguem sem ela.
+2. **Ângulos** (1 chamada cada, em paralelo depois dos testes) — cada um procura problemas de um só tipo, lendo o repositório inteiro e não só o diff:
+   - `correctness` — segue quem chama e quem consome cada símbolo alterado, inclusive arquivos fora do diff (listas de build, entrypoints, config, migrations);
+   - `security` — segurança e integridade de dados;
+   - `contracts` — contratos com quem chama, uso de APIs externas e fakes ou testes que concordam com o bug em vez de com a API real;
+   - `tests` — lê o resultado dos testes e procura caminhos de falha sem cobertura;
+   - `simplification` — duplicação, código morto, complexidade e defesas desnecessárias.
+
+   A saída não é uma revisão: são **hipóteses** (no máximo 6 por ângulo) num bloco fixo com id, gravidade, classe, afirmação de uma frase, `arquivo:linha` e o caminho de falha. Também pode ser exatamente `NO HYPOTHESES`.
+3. **Verificação** (1 chamada por ângulo que tenha hipóteses, logo depois dele) — tenta provar ou derrubar cada hipótese lendo o código, e responde `yes`, `no` ou `unknown` com uma evidência em `arquivo:linha`. Nunca cria hipóteses novas. O Bash descarta as `no`. Uma `unknown` só segue se for `blocking` ou `medium`, e então só pode virar item `[open]`.
+4. **Redação** (1 chamada) — recebe as hipóteses confirmadas de todos os ângulos, junta duplicadas, ordena e escreve o comentário no **mesmo formato** de sempre, com a mesma validação, o mesmo rodapé e o mesmo `update-review`. Não inventa achado que não veio das etapas anteriores, mas lê o código para escrever a correção concreta.
+
+**Regras.**
+
+- Todas as etapas usam o motor, o modelo e o effort do repositório, as mesmas regras de leitura (`policy.md`), `rules.md`, `lessons.md` e o `REVIEW.md` da base. Cada etapa só recebe o resultado da anterior pelo prompt, como dado. Nenhuma etapa escreve arquivos no worktree.
+- No `update`, os ângulos só levantam hipóteses no diff incremental, com o diff completo como contexto. A redação monta o "Since last review" a partir da revisão anterior.
+- **Paralelismo:** no máximo `DEEP_PARALLEL` chamadas ao mesmo tempo (padrão 3). Cada etapa tem o seu timeout, `STAGE_TIMEOUT_SECS` (padrão 600). O lock do poll passa a considerar o pior caso da revisão profunda.
+- **Falha parcial:** um ângulo, ou a verificação dele, que falhe, estoure o tempo ou devolva formato inválido fica de fora. O comentário começa com `Partial review: the <angles> check(s) did not finish.` Se todos os ângulos falharem, ou se a redação falhar, a revisão falha com o comentário de erro de sempre.
+- Cada etapa registra no `poll.log` quanto tempo levou, e o Activity do dashboard mostra isso.
+- **Custo:** até 12 chamadas por revisão em vez de 1, e alguns minutos a mais. Por isso a profundidade é escolhida por repositório.
+- **`repos.json`** ganha `depth` (`quick` ou `deep`). Se o campo faltar, vale `quick`, então as entradas antigas continuam como estão. O dashboard escolhe a profundidade por repositório, e um repositório novo adicionado por ele começa em `deep`.
+- **`tools/try-review <repo> <pr> [quick|deep]`** roda a revisão contra o head do PR e imprime o comentário sem escrever nada no GitHub (sem reação, sem comentário e sem estado). Serve para comparar `quick` e `deep` nos PRs em que o Jean já sabe qual bug passou.
+
 ## Decisões minhas (o Jean pode mudar)
 
 - **Bash + `gh` + `jq` + `codex exec`**. Sem Node/Python no bot. Exceção única: o dashboard local usa Node sem dependências.
@@ -241,7 +277,7 @@ Substitui "uma chamada Codex por revisão" por "uma chamada ao motor escolhido p
 - Lições globais, não por repo; teto de 40.
 - Reações (👀/✅/😕) como sinal de status.
 - Texto extra após o comando de revisão vira foco da revisão.
-- Revisões rodam em série dentro do ciclo do poll (lock evita sobreposição); sem paralelismo.
+- Revisões rodam em série dentro do ciclo do poll (lock evita sobreposição). Só as etapas de uma mesma revisão profunda rodam em paralelo.
 - `/jeanjacintho-memorize` aceito em qualquer PR dos repos configurados, não só depois de uma revisão do bot.
 - Sem suporte a org inteira na v1; só `owner/repo` explícito.
 - Só comentários de conversa do PR disparam comandos (nada de review body nem inline).

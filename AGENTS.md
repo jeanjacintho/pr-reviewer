@@ -5,7 +5,8 @@
 Read the [design spec](docs/superpowers/specs/2026-10-31-pr-reviewer-design.md),
 then the [implementation plan](docs/superpowers/plans/2026-10-31-pr-reviewer.md)
 (for dashboard work, [the dashboard plan](docs/superpowers/plans/2026-10-31-dashboard.md);
-for review engines, [the engines plan](docs/superpowers/plans/2026-10-31-engines.md))
+for review engines, [the engines plan](docs/superpowers/plans/2026-10-31-engines.md);
+for the staged deep review, [the deep review plan](docs/superpowers/plans/2026-11-01-deep-review.md))
 and the task you are working on. The spec is the source of truth; if the plan
 or a task conflicts with it, stop and ask.
 
