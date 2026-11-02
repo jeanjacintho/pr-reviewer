@@ -6,6 +6,8 @@ use warnings;
 #   stages.pl hypotheses <file>
 #   stages.pl verification <hypotheses> <verification>
 #   stages.pl merge <angle> <hypotheses> <verification>
+#   stages.pl present <hypotheses>
+#   stages.pl ceiling <verified findings> <review>
 # Exit status 0 means valid; invalid input prints nothing.
 
 my $PATH_LINE = '`[^`\s]+:[0-9]+(?:-[0-9]+)?`';
@@ -115,6 +117,68 @@ sub merge {
     return $out;
 }
 
+my %RANK = (blocking => 0, medium => 1, low => 2, nit => 3);
+
+# id => {severity, state} for each finding in the merged verified file.
+sub known_findings {
+    my (%known, $id);
+    for my $line (split /\n/, $_[0]) {
+        if ($line =~ m{\A### ([a-z-]+/H[0-9]+)\z}) { $id = $1; $known{$id} = {}; }
+        next unless defined $id;
+        $known{$id}{severity} = $1 if $line =~ /\ASeverity: (\w+)\z/;
+        $known{$id}{state} = $1 if $line =~ /\AVerified: (yes|open)\z/;
+    }
+    return \%known;
+}
+
+# Where a finding ends: a blank line, the next named section of the comment or
+# the verdict.
+my $SECTION_START = qr/\A\s*(?:\*\*(?:Overview|Strengths|Findings|Security|Test coverage|For AI authors|Since last review)|VERDICT:)/;
+
+# The findings of a review as [tag, text]; wrapped lines belong to the item
+# they continue. A finding starts with its severity tag, after an optional list
+# marker ("1.", "1)", "-", "*", "+") and bold. A second severity tag on the
+# line, or one anywhere else, is not understood, so the whole review is refused
+# (undef) instead of skipped.
+sub review_items {
+    my (@items, $open);
+    for my $line (split /\n/, $_[0]) {
+        if ($line =~ /\A\s*(?:(?:\d+[.)]|[-*+])\s+)?(?:\*\*)?\s*\[(blocking|medium|low|nit|open)\](.*)\z/i) {
+            return undef if $2 =~ /\[(?:blocking|medium|low|nit)\]/i;
+            push @items, [lc $1, $line];
+            $open = 1;
+        } elsif ($line =~ /\[(?:blocking|medium|low|nit)\]/i) {
+            return undef;
+        } elsif ($line !~ /\S/ || $line =~ $SECTION_START) {
+            $open = 0;
+        } elsif ($open) {
+            $items[-1][1] .= " $line";
+        }
+    }
+    return \@items;
+}
+
+# An item cites the findings it comes from in an HTML comment. It may be
+# [open] whatever it cites; any other tag needs a cited, confirmed finding
+# at least that serious, so an unverified finding is never promoted.
+sub item_allowed {
+    my ($tag, $text, $known) = @_;
+    my ($cited) = $text =~ /<!--\s*src:\s*([^>]*?)\s*-->/;
+    return 0 unless defined $cited;
+    my @ids = split /\s*,\s*/, $cited;
+    return 0 if !@ids || grep { !exists $known->{$_} } @ids;
+    return 1 if $tag eq 'open';
+    return scalar grep { $known->{$_}{state} eq 'yes' && $RANK{$known->{$_}{severity}} <= $RANK{$tag} } @ids;
+}
+
+sub within_ceiling {
+    my ($findings, $review) = (slurp($_[0]), slurp($_[1]));
+    return 0 unless defined $findings && defined $review;
+    my $known = known_findings($findings);
+    my $items = review_items($review);
+    return $items && !grep { !item_allowed(@$_, $known) } @$items;
+}
+
 my ($mode, @args) = @ARGV;
 $mode //= '';
 my $ok;
@@ -123,6 +187,11 @@ if ($mode eq 'hypotheses' && @args == 1) {
 } elsif ($mode eq 'verification' && @args == 2) {
     my $hypotheses = hypotheses($args[0]);
     $ok = $hypotheses && verification($hypotheses, $args[1]);
+} elsif ($mode eq 'present' && @args == 1) {
+    my $hypotheses = hypotheses($args[0]);
+    $ok = $hypotheses && @$hypotheses;
+} elsif ($mode eq 'ceiling' && @args == 2) {
+    $ok = within_ceiling(@args);
 } elsif ($mode eq 'merge' && @args == 3 && $args[0] =~ /\A[a-z][a-z-]{0,23}\z/) {
     my $hypotheses = hypotheses($args[1]);
     my $verdicts = $hypotheses && (@$hypotheses ? verification($hypotheses, $args[2]) : []);

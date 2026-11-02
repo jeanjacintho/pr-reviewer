@@ -1,0 +1,27 @@
+#!/bin/bash
+# Answers one deep review stage from the files in $FAKE_STAGES:
+#   reply.<name>  what to answer (name: intent, angle-<a>, verify-<a>, write-up)
+#   fail.<name>   makes that stage exit 1
+#   failafter.<name>  answers, then exits 1 (an engine that dies after writing)
+#   slow.<name>   seconds to sleep before answering
+#   delay         seconds every call sleeps, to make overlap visible
+# Each call leaves prompt.<name> and appends start/end lines to events, where
+# a start line also says whether $FAKE_WATCH existed at that moment.
+set -euo pipefail
+prompt="$1"
+stage="$(grep -m1 -oE '^# (Stage: [a-z-]+|Angle: [a-z]+)' "$prompt" | sed 's/^# //; s/^Stage: //; s/^Angle: /angle-/')"
+name="$stage"
+if [ "$stage" = verify ]; then name="verify-$(grep -m1 -oE 'failure path of [a-z]+' "$prompt" | sed 's/.* //')"; fi
+cp "$prompt" "$FAKE_STAGES/prompt.$name"
+watch=no
+if [ -n "${FAKE_WATCH:-}" ] && [ -e "$FAKE_WATCH" ]; then watch=yes; fi
+printf 'start %s watch=%s\n' "$name" "$watch" >> "$FAKE_STAGES/events"
+if [ -e "$FAKE_STAGES/delay" ]; then sleep "$(cat "$FAKE_STAGES/delay")"; fi
+if [ -e "$FAKE_STAGES/slow.$name" ]; then sleep "$(cat "$FAKE_STAGES/slow.$name")"; fi
+if [ -e "$FAKE_STAGES/fail.$name" ]; then
+    printf 'end %s\n' "$name" >> "$FAKE_STAGES/events"
+    exit 1
+fi
+cat "$FAKE_STAGES/reply.$name"
+printf 'end %s\n' "$name" >> "$FAKE_STAGES/events"
+if [ -e "$FAKE_STAGES/failafter.$name" ]; then exit 1; fi

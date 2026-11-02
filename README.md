@@ -135,7 +135,6 @@ Development:
 bash tests/run.sh
 bash tests/run.sh review_command
 tools/gate
-tools/review --engine claude
 ```
 
 Tests use local Git fixtures and fake gh/Codex/launchctl commands, never real

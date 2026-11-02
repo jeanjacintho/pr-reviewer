@@ -242,3 +242,11 @@ test_review_invalid_mode_posts_error_without_codex() {
     assert_contains "$(cat "$FAKE_POSTS")" 'Review failed:'
     assert_not_contains "$(cat "$FAKE_LOG")" 'codex '
 }
+
+test_review_survives_a_short_github_outage() {
+    review_setup
+    export GH_RETRY_ATTEMPTS=4 GH_RETRY_DELAY=0 FAKE_GH_COUNTER="$(mktmp)/count"
+    FAKE_GH_FAIL_FIRST=2 FAKE_GH_FLAKY_MATCH='pr comment' bash "$REVIEW_SCRIPT" full o/r 7 command || fail review
+    assert_one_review_comment
+    assert_eq "$HEAD_SHA" "$(reviewed_get o/r 7)"
+}

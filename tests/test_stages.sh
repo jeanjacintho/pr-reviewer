@@ -149,3 +149,72 @@ test_stages_merge_refuses_invalid_input_and_prints_nothing() {
     if out="$(merge_verified correctness "$STAGE_DIR/hyp" "$STAGE_DIR/ver")"; then fail short_verification; fi
     assert_eq '' "$out"
 }
+
+test_stages_has_hypotheses_follows_the_parser() {
+    stages_setup
+    printf '%s' "$(hyp_block 1)" > "$STAGE_DIR/hyp"
+    has_hypotheses "$STAGE_DIR/hyp" || fail block
+    printf '### H1 \r\nSeverity: low\r\nClass: bug\r\nClaim: x\r\nFiles: `a:1`\r\nFailure path: y\r\n' > "$STAGE_DIR/hyp"
+    has_hypotheses "$STAGE_DIR/hyp" || fail whitespace_and_crlf
+    printf 'NO HYPOTHESES\n' > "$STAGE_DIR/hyp"
+    if has_hypotheses "$STAGE_DIR/hyp"; then fail none; fi
+    printf 'prose\n' > "$STAGE_DIR/hyp"
+    if has_hypotheses "$STAGE_DIR/hyp"; then fail invalid; fi
+    if has_hypotheses "$STAGE_DIR/missing"; then fail missing; fi
+}
+
+# ceiling_check <review items...>: validates a write-up made of these lines
+# against four verified findings: correctness/H1 (blocking), security/H1
+# (medium) and tests/H1 (low) confirmed, contracts/H1 (blocking) still open.
+ceiling_check() {
+    printf '%s\n' "$@" > "$STAGE_DIR/review"
+    validate_ceiling "$STAGE_DIR/verified" "$STAGE_DIR/review"
+}
+
+test_stages_ceiling_ties_every_item_to_findings_that_justify_it() {
+    stages_setup
+    { merged_block correctness 1 blocking bug yes '`a:1` — x'; merged_block security 1 medium security yes '`a:1` — x'; merged_block tests 1 low tests yes '`a:1` — x'; merged_block contracts 1 blocking contract open '`a:1` — x'; } > "$STAGE_DIR/verified"
+    ceiling_check '1. [blocking] [bug] a <!-- src: correctness/H1 -->' '2. [medium] [security] b <!-- src: security/H1 -->' '3. [open] [contract] **Q: c** <!-- src: contracts/H1 -->' '4. [low] [tests] d <!-- src:tests/H1 -->' || fail as_verified
+    ceiling_check '1. [medium] [bug] a <!-- src: correctness/H1 -->' '2. [low] [security] b <!-- src: security/H1 -->' || fail downgraded
+    ceiling_check '1. [blocking] [bug] merged <!-- src: correctness/H1, contracts/H1 -->' || fail merged_with_an_open_one
+    ceiling_check '1. [open] [bug] cautious <!-- src: correctness/H1 -->' || fail open_is_always_allowed
+    ceiling_check '1. [medium] [bug] wrapped over' '   two lines <!-- src: correctness/H1 -->' || fail wrapped
+    ceiling_check '- [blocking] [bug] bullet <!-- src: correctness/H1 -->' || fail bullets
+    ceiling_check '1. [open] [contract]' '**Q: Does this caller need the old behavior?** <!-- src: contracts/H1 -->' || fail wrapped_bold_continuation
+    ceiling_check '1) [blocking] [bug] paren <!-- src: correctness/H1 -->' '2. **[medium]** [security] bold <!-- src: security/H1 -->' '+ [low] [tests] plus <!-- src: tests/H1 -->' || fail other_list_shapes
+    ceiling_check '1. [BLOCKING] [bug] shouting <!-- src: correctness/H1 -->' '2. [NIT] [tests] small <!-- src: tests/H1 -->' '3. [OPEN] [contract] q <!-- src: contracts/H1 -->' || fail upper_case
+    ceiling_check '**For AI authors** — Answer each [open] item directly.' '1. [open] [contract] q <!-- src: contracts/H1 -->' || fail open_in_prose
+    ceiling_check 'None — no load-bearing issues found.' '' '**Security** — None' || fail nothing_listed
+    ceiling_check '1. [blocking] [contract] promoted <!-- src: contracts/H1 -->' && fail promoted_open
+    ceiling_check '1. [medium] [contract] promoted <!-- src: contracts/H1 -->' && fail promoted_open_to_medium
+    ceiling_check '1. [blocking] [security] too high <!-- src: security/H1 -->' && fail above_its_source
+    ceiling_check '1. [medium] [tests] too high <!-- src: tests/H1 -->' && fail above_a_low_source
+    ceiling_check '1. [open] [blocking] [contract] smuggled <!-- src: contracts/H1 -->' && fail second_tag_on_an_open_item
+    ceiling_check '1. [blocking] [bug] a [medium] <!-- src: correctness/H1 -->' && fail second_tag_after_a_confirmed_one
+    ceiling_check '1. [open] [contract] q <!-- src: contracts/H1 -->' '   and it is [blocking] really' && fail tag_on_a_wrapped_line
+    ceiling_check '1. [open] [contract] no citation of its own' '**Security** — None <!-- src: contracts/H1 -->' && fail citation_borrowed_from_a_section
+    ceiling_check '1. [open] [contract] no citation of its own' 'VERDICT: COMMENT <!-- src: contracts/H1 -->' && fail citation_borrowed_from_the_verdict
+    ceiling_check '1. [blocking] [bug] Uncited claim.' '**Security**' 'None <!-- src: correctness/H1 -->' 'VERDICT: COMMENT' && fail citation_after_a_section_heading
+    ceiling_check '1. [blocking] [bug] Uncited claim.' 'VERDICT: COMMENT' '<!-- src: correctness/H1 -->' && fail citation_after_the_verdict
+    ceiling_check '1. [blocking] [bug] Uncited claim.' '' '  **Security** — None <!-- src: correctness/H1 -->' && fail citation_after_an_indented_section
+    ceiling_check '1. [blocking] [bug] Uncited claim.' '   **Security** — None <!-- src: correctness/H1 -->' && fail citation_in_an_indented_section_without_a_gap
+    ceiling_check '1. [blocking] [bug] Uncited claim.' '' 'Some later paragraph <!-- src: correctness/H1 -->' && fail citation_after_a_blank_line
+    ceiling_check '1. [blocking] [bug] a <!-- src: correctness/H1 -->' '' '2. [open] [contract] q <!-- src: contracts/H1 -->' || fail items_separated_by_blank_lines
+    ceiling_check '1. [blocking] [bug] ok <!-- src: correctness/H1 -->' '**Security** — None' 'VERDICT: COMMENT' || fail citation_before_a_section
+    ceiling_check '1) [blocking] [contract] promoted <!-- src: contracts/H1 -->' && fail promoted_paren_alone
+    ceiling_check '1. **[blocking]** [contract] promoted <!-- src: contracts/H1 -->' && fail promoted_bold_alone
+    ceiling_check '1. [blocking] [bug] a <!-- src: correctness/H1 -->' '2) [blocking] [contract] promoted <!-- src: contracts/H1 -->' && fail promoted_paren_after_a_good_one
+    ceiling_check '1. [blocking] [bug] a <!-- src: correctness/H1 -->' '2. **[blocking]** [contract] promoted <!-- src: contracts/H1 -->' && fail promoted_bold_after_a_good_one
+    ceiling_check '1. [BLOCKING] [contract] promoted <!-- src: contracts/H1 -->' && fail promoted_upper_case
+    ceiling_check 'This is the [blocking] problem <!-- src: contracts/H1 -->' && fail severity_tag_in_prose
+    ceiling_check '1. [blocking] [bug] a' && fail no_source
+    ceiling_check '1. [low] [bug] a <!-- src: -->' && fail empty_source
+    ceiling_check '1. [open] [bug] a <!-- src: -->' && fail empty_source_on_an_open_item
+    ceiling_check '1. [open] [bug] invented <!-- src: nope/H9 -->' && fail unknown_source_on_an_open_item
+    ceiling_check '- [blocking] [contract] promoted bullet <!-- src: contracts/H1 -->' && fail promoted_bullet
+    ceiling_check '1. [low] [bug] invented <!-- src: nope/H9 -->' && fail unknown_source
+    ceiling_check '1. [blocking] [bug] a <!-- src: correctness/H1 -->' '2. [blocking] [contract] promoted <!-- src: contracts/H1 -->' && fail one_bad_item_among_good
+    if validate_ceiling "$STAGE_DIR/verified" "$STAGE_DIR/missing"; then fail missing_review; fi
+    if validate_ceiling "$STAGE_DIR/missing" "$STAGE_DIR/review"; then fail missing_findings; fi
+    return 0
+}

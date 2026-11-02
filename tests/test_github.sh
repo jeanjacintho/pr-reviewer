@@ -53,3 +53,88 @@ test_github_operations() {
     assert_eq focus "$(comment_body node)"
     assert_eq 7 "$(fetch_open_prs o/r | jq -r '.data.repository.pullRequests.nodes[0].number')"
 }
+
+retry_setup() {
+    github_setup
+    export STATE_DIR="$(mktmp)" GH_RETRY_ATTEMPTS=4 GH_RETRY_DELAY=0 FAKE_GH_COUNTER="$(mktmp)/count"
+    export FAKE_GH_FAIL_FIRST=2 FAKE_GH_FLAKY_MATCH=Reaction
+}
+
+test_react_retries_a_transient_graphql_error() {
+    retry_setup
+    react node EYES || fail react
+    assert_eq 3 "$(grep -c addReaction "$FAKE_LOG")"
+}
+
+test_react_gives_up_and_logs_the_gh_error() {
+    retry_setup
+    export FAKE_GH_FAIL_FIRST=99
+    react node EYES && fail should_fail
+    assert_eq 4 "$(grep -c addReaction "$FAKE_LOG")"
+    assert_contains "$(cat "$STATE_DIR/poll.log")" 'Something went wrong while executing your query. Please include 0DEF:1234:5678'
+}
+
+test_a_client_error_is_not_retried() {
+    retry_setup
+    export FAKE_GH_FAIL_TEXT='gh: Validation Failed (HTTP 422)'
+    react node EYES && fail should_fail
+    assert_eq 1 "$(grep -c addReaction "$FAKE_LOG")"
+    assert_contains "$(cat "$STATE_DIR/poll.log")" 'HTTP 422'
+}
+
+test_a_server_error_status_is_retried() {
+    retry_setup
+    export FAKE_GH_FAIL_TEXT='gh: Bad Gateway (HTTP 502)'
+    unreact node EYES || fail unreact
+    assert_eq 3 "$(grep -c removeReaction "$FAKE_LOG")"
+}
+
+test_reads_are_retried() {
+    retry_setup
+    export FAKE_GH_FLAKY_MATCH='api user'
+    assert_eq alice "$(bot_login)"
+    assert_eq 3 "$(grep -c 'api user' "$FAKE_LOG")"
+}
+
+test_post_comment_retries_a_transient_failure_once_posted() {
+    retry_setup
+    export FAKE_GH_FLAKY_MATCH='pr comment'
+    local body="$(mktmp)/body"
+    printf hello > "$body"
+    post_comment o/r 7 "$body" || fail post
+    assert_eq 1 "$(grep -c '^===COMMENT===$' "$FAKE_POSTS")"
+}
+
+test_post_comment_does_not_repeat_a_post_that_reached_github() {
+    retry_setup
+    export FAKE_GH_FLAKY_MATCH='pr comment' FAKE_GH_FAIL_LANDS=yes FAKE_GH_FAIL_FIRST=1
+    local body="$(mktmp)/body"
+    printf 'hello\n<!-- m -->\n' > "$body"
+    jq -n --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '[{id:1,created_at:$now,user:{login:"alice"},body:"hello\n<!-- m -->"}]' > "$FAKE_GH_COMMENTS"
+    post_comment o/r 7 "$body" || fail post
+    assert_eq 1 "$(grep -c '^===COMMENT===$' "$FAKE_POSTS")"
+}
+
+test_post_comment_first_attempt_posts_even_if_an_identical_comment_exists() {
+    retry_setup
+    local body="$(mktmp)/body"
+    printf 'No new commits.\n' > "$body"
+    jq -n --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '[{id:1,created_at:$now,user:{login:"alice"},body:"No new commits."}]' > "$FAKE_GH_COMMENTS"
+    post_comment o/r 7 "$body" || fail post
+    assert_eq 1 "$(grep -c '^===COMMENT===$' "$FAKE_POSTS")"
+}
+
+test_post_comment_does_not_post_again_when_the_duplicate_check_fails() {
+    retry_setup
+    export FAKE_GH_FLAKY_MATCH='pr comment' FAKE_GH_FAIL_FIRST=1 FAKE_GH_FAIL_MATCH='api user'
+    local body="$(mktmp)/body"
+    printf hello > "$body"
+    post_comment o/r 7 "$body" && fail should_not_guess
+    [ ! -s "$FAKE_POSTS" ] || fail posted_blindly
+}
+
+test_a_failed_attempt_leaves_no_output_behind() {
+    retry_setup
+    export FAKE_GH_FLAKY_MATCH=graphql FAKE_GH_FAIL_FIRST=1 FAKE_GH_FAIL_STDOUT='{"data":null,"errors":[{}]}'
+    assert_eq 7 "$(fetch_open_prs o/r | jq -rs 'if length == 1 then .[0].data.repository.pullRequests.nodes[0].number else "extra output" end')"
+}
