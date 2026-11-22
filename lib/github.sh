@@ -1,6 +1,6 @@
 # Failures worth another try: GitHub outages and network errors, never 4xx.
 transient_gh_error() {
-    grep -Eiq 'Something went wrong while executing your query|HTTP 5[0-9][0-9]|Bad Gateway|Service Unavailable|Gateway Time-?out|timed? ?out|connection (reset|refused)|dial tcp|unexpected EOF|could not resolve host|secondary rate limit|HTTP 429' "$1"
+    grep -Eiq 'Something went wrong while executing your query|HTTP 5[0-9][0-9]|Bad Gateway|Service Unavailable|Gateway Time-?out|timed? ?out|connection (reset|refused)|error connecting to|check your internet connection|no such host|network is unreachable|dial tcp|unexpected EOF|could not resolve host|secondary rate limit|HTTP 429' "$1"
 }
 
 # Runs a command, retrying transient failures with a growing delay. The command
