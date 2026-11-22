@@ -9,5 +9,7 @@ claude_text() {
     local args=(-p --restricted --tools "$tools" --permission-mode dontAsk --strict-mcp-config --disable-slash-commands --no-session-persistence --output-format text)
     if [ -n "$model" ]; then args+=( --model "$model" ); fi
     if [ -n "$effort" ]; then args+=( --effort "$effort" ); fi
-    (cd "$directory" && run_with_timeout "$seconds" claude "${args[@]}" < "$prompt" > "$output" 2> "$output.log")
+    # A separate bash enters the directory, not a ( ) subshell: when a subshell
+    # fails, only its own ERR trap runs and the review would end without a word.
+    run_with_timeout "$seconds" bash -c 'cd "$1" && shift && exec "$@"' bash "$directory" claude "${args[@]}" < "$prompt" > "$output" 2> "$output.log"
 }

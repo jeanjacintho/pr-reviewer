@@ -250,3 +250,37 @@ test_review_survives_a_short_github_outage() {
     assert_one_review_comment
     assert_eq "$HEAD_SHA" "$(reviewed_get o/r 7)"
 }
+
+# A failing Claude Code must end like a failing Codex: one error comment, the
+# confused reaction, nothing recorded as reviewed, and the reason in the log.
+test_review_claude_failures_are_reported() {
+    review_setup
+    repos_set engine claude
+    local kind
+    for kind in login-expired silent-exit; do
+        : > "$FAKE_POSTS"
+        : > "$FAKE_LOG"
+        : > "$STATE_DIR/poll.log"
+        case "$kind" in
+            login-expired) printf 'Failed to authenticate: this login reached its time limit. Run `claude auth login` to sign in again.\n' > "$FAKE_CODEX_OUT" ;;
+            silent-exit) : > "$FAKE_CODEX_OUT" ;;
+        esac
+        FAKE_CLAUDE_EXIT=1 bash "$REVIEW_SCRIPT" full o/r 7 command && fail "$kind"
+        assert_one_review_comment
+        assert_contains "$(cat "$FAKE_POSTS")" 'Review failed:'
+        assert_contains "$(cat "$FAKE_LOG")" 'content=CONFUSED'
+        assert_contains "$(cat "$STATE_DIR/poll.log")" "o/r#7: Review failed:"
+        assert_eq '' "$(reviewed_get o/r 7)"
+        assert_eq '' "$(ls -A "$WORK_DIR/wt")"
+    done
+    : > "$STATE_DIR/poll.log"
+    printf 'Failed to authenticate: this login reached its time limit. Run `claude auth login` to sign in again.\n' > "$FAKE_CODEX_OUT"
+    FAKE_CLAUDE_EXIT=1 bash "$REVIEW_SCRIPT" full o/r 7 command && fail again
+    assert_contains "$(cat "$STATE_DIR/poll.log")" 'Engine failed for o/r: Failed to authenticate: this login reached its time limit.'
+}
+
+test_review_engine_failure_log_names_the_codex_error() {
+    review_setup
+    FAKE_CODEX_EXIT=1 bash "$REVIEW_SCRIPT" full o/r 7 command && fail codex_exit
+    assert_contains "$(cat "$STATE_DIR/poll.log")" 'Engine failed for o/r:'
+}

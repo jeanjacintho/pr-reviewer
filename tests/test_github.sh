@@ -89,6 +89,17 @@ test_a_server_error_status_is_retried() {
     assert_eq 3 "$(grep -c removeReaction "$FAKE_LOG")"
 }
 
+test_a_dropped_connection_is_retried() {
+    local text
+    for text in 'error connecting to api.github.com
+check your internet connection or https://githubstatus.com' 'Post "https://api.github.com/graphql": dial tcp: lookup api.github.com: no such host' 'read tcp: connection reset by peer' 'Get "https://api.github.com/user": network is unreachable'; do
+        retry_setup
+        export FAKE_GH_FAIL_TEXT="$text"
+        unreact node EYES || fail "not retried: $text"
+        assert_eq 3 "$(grep -c removeReaction "$FAKE_LOG")"
+    done
+}
+
 test_reads_are_retried() {
     retry_setup
     export FAKE_GH_FLAKY_MATCH='api user'
